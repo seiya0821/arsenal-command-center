@@ -878,6 +878,112 @@ def build_trend_summary(matches_df: pd.DataFrame, limit: int = 5) -> pd.DataFram
     return pd.DataFrame(rows)
 
 
+def build_recent_results_benchmark(matches_df: pd.DataFrame, limit: int = 5) -> tuple[pd.DataFrame, list[str]]:
+    columns = ["Metric", "Recent", "Season Avg", "Target", "Status", "Delta vs Avg"]
+    completed = matches_df[matches_df["finished"]].copy().sort_values("date", ascending=False)
+    if completed.empty:
+        return pd.DataFrame(columns=columns), ["比較できる完了済み試合がありません。"]
+
+    recent = completed.head(limit)
+    all_completed = completed.copy()
+    recent_gf = float(recent["arsenal_goals"].fillna(0).mean())
+    recent_ga = float(recent["opponent_goals"].fillna(0).mean())
+    recent_gd = recent_gf - recent_ga
+    recent_win_rate = float((recent["result"] == "Win").mean() * 100)
+    recent_clean_sheet = float((recent["opponent_goals"].fillna(0) == 0).mean() * 100)
+    recent_unbeaten = float((recent["result"] != "Loss").mean() * 100)
+
+    season_gf = float(all_completed["arsenal_goals"].fillna(0).mean())
+    season_ga = float(all_completed["opponent_goals"].fillna(0).mean())
+    season_gd = season_gf - season_ga
+    season_win_rate = float((all_completed["result"] == "Win").mean() * 100)
+    season_clean_sheet = float((all_completed["opponent_goals"].fillna(0) == 0).mean() * 100)
+    season_unbeaten = float((all_completed["result"] != "Loss").mean() * 100)
+
+    metric_specs = [
+        ("Goals For / match", recent_gf, season_gf, 2.0, "higher"),
+        ("Goals Against / match", recent_ga, season_ga, 1.0, "lower"),
+        ("Goal Difference / match", recent_gd, season_gd, 1.0, "higher"),
+        ("Win Rate", recent_win_rate, season_win_rate, 70.0, "higher"),
+        ("Clean Sheet Rate", recent_clean_sheet, season_clean_sheet, 40.0, "higher"),
+        ("Unbeaten Rate", recent_unbeaten, season_unbeaten, 80.0, "higher"),
+    ]
+
+    rows = []
+    for metric, recent_value, season_value, target, direction in metric_specs:
+        if direction == "higher":
+            status = "Good" if recent_value >= target else ("Watch" if recent_value >= season_value else "Concern")
+            delta = recent_value - season_value
+        else:
+            status = "Good" if recent_value <= target else ("Watch" if recent_value <= season_value else "Concern")
+            delta = season_value - recent_value
+        rows.append(
+            {
+                "Metric": metric,
+                "Recent": round(recent_value, 2),
+                "Season Avg": round(season_value, 2),
+                "Target": round(target, 2),
+                "Status": status,
+                "Delta vs Avg": round(delta, 2),
+            }
+        )
+    benchmark_df = pd.DataFrame(rows, columns=columns)
+    good_count = int((benchmark_df["Status"] == "Good").sum())
+    concern_count = int((benchmark_df["Status"] == "Concern").sum())
+    notes = [
+        f"直近{len(recent)}試合で Good が {good_count} 項目、Concern が {concern_count} 項目です。",
+    ]
+    if recent_gd > season_gd:
+        notes.append(f"得失点差は直近 {recent_gd:+.2f}/match で、選択範囲平均 {season_gd:+.2f} より良化しています。")
+    else:
+        notes.append(f"得失点差は直近 {recent_gd:+.2f}/match で、選択範囲平均 {season_gd:+.2f} を下回っています。")
+    if recent_ga <= 1.0:
+        notes.append("失点ペースは良好で、守備面の結果は安定しています。")
+    else:
+        notes.append("失点ペースが高めで、試合内容が良くても結果が不安定になりやすい状態です。")
+    return benchmark_df, notes
+
+
+def create_recent_results_benchmark_chart(benchmark_df: pd.DataFrame) -> go.Figure:
+    fig = go.Figure()
+    if benchmark_df.empty:
+        return base_chart_layout(fig, height=320)
+    plot_df = benchmark_df.copy()
+    status_colors = {"Good": "#22C55E", "Watch": ARSENAL_GOLD, "Concern": ARSENAL_RED}
+    fig.add_trace(
+        go.Bar(
+            y=plot_df["Metric"],
+            x=plot_df["Season Avg"],
+            name="Selected range avg",
+            orientation="h",
+            marker=dict(color="rgba(147,197,253,0.42)"),
+            hovertemplate="<b>%{y}</b><br>Selected range avg: %{x:.2f}<extra></extra>",
+        )
+    )
+    fig.add_trace(
+        go.Bar(
+            y=plot_df["Metric"],
+            x=plot_df["Recent"],
+            name="Recent form",
+            orientation="h",
+            marker=dict(color=plot_df["Status"].map(status_colors)),
+            customdata=plot_df[["Target", "Status", "Delta vs Avg"]],
+            hovertemplate=(
+                "<b>%{y}</b><br>"
+                "Recent: %{x:.2f}<br>"
+                "Target: %{customdata[0]:.2f}<br>"
+                "Status: %{customdata[1]}<br>"
+                "Delta vs avg: %{customdata[2]:+.2f}<extra></extra>"
+            ),
+        )
+    )
+    fig = base_chart_layout(fig, height=360)
+    fig.update_layout(barmode="group", legend=dict(orientation="h", y=1.08, x=0))
+    fig.update_xaxes(title="Value", gridcolor="rgba(159,176,196,0.14)")
+    fig.update_yaxes(title=None, autorange="reversed")
+    return fig
+
+
 def build_top_players_df(payload: dict) -> pd.DataFrame:
     top_players = payload.get("overview", {}).get("topPlayers", {})
     rows = []
@@ -3619,6 +3725,7 @@ if filtered_matches.empty:
 
 review_history_df = build_review_history(filtered_matches)
 trend_summary_df = build_trend_summary(filtered_matches)
+recent_benchmark_df, recent_benchmark_notes = build_recent_results_benchmark(filtered_matches)
 
 default_match = filtered_matches[filtered_matches["finished"]].head(1)
 default_match_id = default_match["match_id"].iloc[0] if not default_match.empty else filtered_matches["match_id"].iloc[0]
@@ -3908,6 +4015,14 @@ if layout_mode == "Guided Story":
         st.write(f"**何が足りなかったか**  {match_missing_line}")
     with context_right:
         render_match_review(review_title, review_lines)
+        with st.expander("Recent form benchmark", expanded=True):
+            for note in recent_benchmark_notes:
+                st.write(f"- {note}")
+            st.plotly_chart(
+                create_recent_results_benchmark_chart(recent_benchmark_df),
+                width="stretch",
+                key=f"guided_recent_benchmark_{selected_match_id}",
+            )
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown('<div class="panel">', unsafe_allow_html=True)
@@ -4284,8 +4399,30 @@ with trend_col:
     result_fig.update_xaxes(showgrid=False)
     result_fig.update_yaxes(gridcolor="rgba(159,176,196,0.14)", zeroline=False, title=None)
     st.plotly_chart(result_fig, width="stretch")
+    st.caption("下の比較は、直近成績が選択中コンペ範囲の平均や目標ラインに対して良いのか悪いのかを見るためのベンチマークです。")
+    st.plotly_chart(
+        create_recent_results_benchmark_chart(recent_benchmark_df),
+        width="stretch",
+        key=f"recent_results_benchmark_{selected_match_id}",
+    )
+    for note in recent_benchmark_notes:
+        st.write(f"- {note}")
     if not trend_summary_df.empty:
         st.dataframe(trend_summary_df, width="stretch", hide_index=True)
+    if not recent_benchmark_df.empty:
+        st.dataframe(
+            recent_benchmark_df,
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "Metric": st.column_config.TextColumn("Metric", width="medium"),
+                "Recent": st.column_config.NumberColumn("Recent", format="%.2f"),
+                "Season Avg": st.column_config.NumberColumn("Selected Avg", format="%.2f"),
+                "Target": st.column_config.NumberColumn("Good Line", format="%.2f"),
+                "Status": st.column_config.TextColumn("Status", width="small"),
+                "Delta vs Avg": st.column_config.NumberColumn("Delta vs Avg", format="%+.2f"),
+            },
+        )
     st.markdown("</div>", unsafe_allow_html=True)
 
 review_col, notes_col = st.columns([1.1, 0.9])
