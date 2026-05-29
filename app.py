@@ -3517,6 +3517,12 @@ with st.sidebar:
         horizontal=True,
         key="dashboard_mode",
     )
+    layout_mode = st.radio(
+        "Layout",
+        options=["Guided Story", "Full Detail"],
+        index=0,
+        help="Guided Story は文脈順に読む画面、Full Detail は全パネルを細かく見る画面です。",
+    )
 
 inject_auto_refresh(refresh_minutes * 60)
 
@@ -3816,6 +3822,285 @@ top_metrics_row_two = st.columns(3)
 top_metrics_row_two[0].metric("Score", selected_match["score"])
 top_metrics_row_two[1].metric("Recent Form", recent_form_string, help=f"Selected competitions における直近 {recent_form_matches} 試合の結果。W=win, D=draw, L=loss")
 top_metrics_row_two[2].metric("Selected Record", selected_record, help="現在の competition filter で選ばれている試合群の通算 W-D-L")
+
+if layout_mode == "Guided Story":
+    st.markdown('<div class="panel">', unsafe_allow_html=True)
+    st.subheader("1. Match Context")
+    st.caption("まず試合の前提と結論を押さえます。ここで結果、相手、会場、試合の読み筋を固定してから細部に入ります。")
+    context_left, context_right = st.columns([0.95, 1.05])
+    with context_left:
+        context_metrics = st.columns(2)
+        context_metrics[0].metric("Venue", selected_match["venue"])
+        context_metrics[1].metric("Result", selected_match["result"])
+        context_metrics = st.columns(2)
+        context_metrics[0].metric("Goals For", int(selected_match["arsenal_goals"]) if pd.notna(selected_match["arsenal_goals"]) else 0)
+        context_metrics[1].metric("Goals Against", int(selected_match["opponent_goals"]) if pd.notna(selected_match["opponent_goals"]) else 0)
+        st.write(f"**Arsenal はどうだったか**  {match_how_line}")
+        st.write(f"**なぜこの結果になったか**  {match_why_line}")
+        st.write(f"**何が足りなかったか**  {match_missing_line}")
+    with context_right:
+        render_match_review(review_title, review_lines)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown('<div class="panel">', unsafe_allow_html=True)
+    st.subheader("2. Result Drivers")
+    st.caption("次に、勝敗を直接押した要素を確認します。xG、中央侵入、セットプレー、キープレイヤーを近くに置いて読めるようにしています。")
+    driver_left, driver_right = st.columns([1.05, 0.95])
+    with driver_left:
+        signal_cols = st.columns(4)
+        signal_cols[0].metric("Arsenal xG", f"{shot_profile['xg']:.2f}")
+        signal_cols[1].metric("Opponent xG", f"{opp_shot_profile['xg']:.2f}")
+        signal_cols[2].metric("Central Shots", shot_profile["central_shots"])
+        signal_cols[3].metric("Final-third Passes", f"{tactical_summary['final_third_passes']:.0f}")
+        edge_cols = st.columns(2)
+        with edge_cols[0]:
+            st.write("**Arsenal Edge**")
+            for line in arsenal_edges or ["明確な優位は限定的で、細部勝負の試合でした。"]:
+                st.write(f"- {line}")
+        with edge_cols[1]:
+            st.write("**Opponent Threat**")
+            for line in opponent_edges or ["相手の脅威は大きくなく、Arsenal が主導権を持てた試合でした。"]:
+                st.write(f"- {line}")
+    with driver_right:
+        st.metric("Key Player", key_player_name)
+        for line in key_player_reasons or ["この試合ではチーム全体の実行が結果を左右しました。"]:
+            st.write(f"- {line}")
+        if deep_dive_candidates:
+            button_cols = st.columns(min(4, len(deep_dive_candidates)))
+            for idx, player_name in enumerate(deep_dive_candidates[:4]):
+                if button_cols[idx].button(player_name, key=f"guided_deep_dive_button_{selected_match_id}_{player_name}", use_container_width=True):
+                    st.session_state[deep_dive_state_key] = player_name
+                    st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    flow_left, flow_right = st.columns([1.05, 0.95])
+    with flow_left:
+        st.markdown('<div class="panel">', unsafe_allow_html=True)
+        st.subheader("3. Game Flow")
+        st.caption("どの時間帯で試合が傾いたかを見ます。xG Race、時間帯別xG、スコア状態をまとめて置いています。")
+        flow_tabs = st.tabs(["xG Race", "Phase Control", "Score State", "Events"])
+        with flow_tabs[0]:
+            st.plotly_chart(create_xg_race_chart(xg_race_df), width="stretch", key=f"guided_xg_race_{selected_match_id}")
+            for note in match_swing_notes:
+                st.write(f"- {note}")
+        with flow_tabs[1]:
+            st.plotly_chart(create_phase_split_chart(arsenal_phase_df, opponent_phase_df), width="stretch", key=f"guided_phase_{selected_match_id}")
+            for line in phase_comparison_notes:
+                st.write(f"- {line}")
+        with flow_tabs[2]:
+            if score_state_df.empty:
+                st.info("Score-state data is unavailable for this match.")
+            else:
+                st.plotly_chart(create_score_state_chart(score_state_df), width="stretch", key=f"guided_score_state_{selected_match_id}")
+                st.dataframe(score_state_df, width="stretch", hide_index=True)
+        with flow_tabs[3]:
+            st.plotly_chart(create_event_timeline_chart(event_df), width="stretch", key=f"guided_event_{selected_match_id}")
+            st.dataframe(key_moments_df, width="stretch", hide_index=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with flow_right:
+        st.markdown('<div class="panel">', unsafe_allow_html=True)
+        st.subheader("4. Chance & Territory")
+        st.caption("流れの次に、どこまで前進でき、どれだけ良いチャンスに変換できたかを確認します。")
+        chance_cols = st.columns(2)
+        chance_cols[0].metric("Open Play xG", f"{shot_profile['open_play_xg']:.2f}")
+        chance_cols[1].metric("Set Piece xG", f"{shot_profile['set_piece_xg']:.2f}")
+        chance_cols = st.columns(2)
+        chance_cols[0].metric("Box Shots", shot_profile["box_shots"])
+        chance_cols[1].metric("Field Tilt Proxy", f"{control_profile['field_tilt_proxy']:.0f}%")
+        st.plotly_chart(create_final_third_access_chart(player_df), width="stretch", key=f"guided_final_third_{selected_match_id}")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown('<div class="panel">', unsafe_allow_html=True)
+    st.subheader("5. Tactical Structure")
+    st.caption("ここで構造を読みます。保持、脅威ゾーン、プレッシング、守備、選手関係性を同じ章にまとめています。")
+    if control_room_lines:
+        control_cols = st.columns(len(control_room_lines))
+        for idx, line in enumerate(control_room_lines):
+            label, _, value = line.partition(": ")
+            control_cols[idx].markdown(
+                f"""
+                <div class="insight-card">
+                    <div class="insight-card-label">{label}</div>
+                    <div class="insight-card-value">{value if value else line}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+    structure_tabs = st.tabs(["Threat Zones", "Build-up", "Pressing", "Structural Diagnosis", "Maps"])
+    with structure_tabs[0]:
+        tz_left, tz_right = st.columns([1.12, 0.88])
+        with tz_left:
+            st.plotly_chart(create_zone_threat_map(zone_threat_df), width="stretch", key=f"guided_zone_threat_{selected_match_id}")
+        with tz_right:
+            st.dataframe(
+                zone_threat_df[
+                    ["Zone", "Threat", "Primary Builder", "Top Contributors", "Main Shooter", "Shot xG", "Progression proxy", "Shots"]
+                ].sort_values("Threat", ascending=False),
+                width="stretch",
+                hide_index=True,
+            )
+    with structure_tabs[1]:
+        build_left, build_right = st.columns([1.12, 0.88])
+        with build_left:
+            st.plotly_chart(create_build_up_structure_chart(build_up_structure_df), width="stretch", key=f"guided_build_up_{selected_match_id}")
+        with build_right:
+            for line in build_up_structure_lines:
+                st.write(f"- {line}")
+            st.dataframe(build_up_structure_df[["Player", "Line", "Lane", "Touches", "Final-third Passes"]], width="stretch", hide_index=True)
+    with structure_tabs[2]:
+        press_left, press_right = st.columns([1.0, 1.0])
+        with press_left:
+            st.plotly_chart(create_pressing_profile_chart(pressing_profile_df), width="stretch", key=f"guided_pressing_{selected_match_id}")
+        with press_right:
+            for line in pressing_profile_lines:
+                st.write(f"- {line}")
+            st.dataframe(pressing_profile_df, width="stretch", hide_index=True)
+    with structure_tabs[3]:
+        diag_left, diag_right = st.columns([1.0, 1.0])
+        with diag_left:
+            st.plotly_chart(create_structural_diagnosis_chart(structural_diagnosis_df), width="stretch", key=f"guided_structural_{selected_match_id}")
+        with diag_right:
+            for line in structural_summary_lines:
+                st.write(f"- {line}")
+            st.write("**Attack**")
+            for line in attack_review_lines[:3]:
+                st.write(f"- {line}")
+            st.write("**Opponent Possession**")
+            for line in opponent_possession_review_lines[:3]:
+                st.write(f"- {line}")
+    with structure_tabs[4]:
+        map_tabs = st.tabs(["Shot Map", "Pass Network", "Relationships"])
+        with map_tabs[0]:
+            st.plotly_chart(create_match_shot_map(shot_df) if not shot_df.empty else create_shot_threat_map(player_df), width="stretch", key=f"guided_shot_map_{selected_match_id}")
+        with map_tabs[1]:
+            st.plotly_chart(create_pass_map(player_df), width="stretch", key=f"guided_pass_map_{selected_match_id}")
+        with map_tabs[2]:
+            rel_left, rel_right = st.columns([1.0, 1.0])
+            with rel_left:
+                if relationship_hubs_df.empty:
+                    st.info("Relationship data is unavailable for this match.")
+                else:
+                    st.plotly_chart(create_hub_chart(relationship_hubs_df), width="stretch", key=f"guided_hub_chart_{selected_match_id}")
+            with rel_right:
+                st.dataframe(relationship_links_df, width="stretch", hide_index=True)
+                st.dataframe(relationship_hubs_df, width="stretch", hide_index=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    player_left, player_right = st.columns([1.05, 0.95])
+    with player_left:
+        st.markdown('<div class="panel">', unsafe_allow_html=True)
+        st.subheader("6. Player Layer")
+        st.caption("最後に選手へ降ります。試合単位の貢献とシーズン全体の評価を分けて見ます。")
+        player_tabs = st.tabs(["Match Impact", "Deep Dive", "Season"])
+        with player_tabs[0]:
+            st.dataframe(player_impact_df, width="stretch", hide_index=True)
+            st.dataframe(role_profile_df, width="stretch", hide_index=True)
+        with player_tabs[1]:
+            if selected_deep_dive_player:
+                deep_left, deep_right = st.columns([0.95, 1.05])
+                with deep_left:
+                    st.plotly_chart(create_player_stat_bar(player_deep_dive), width="stretch", key=f"guided_player_bar_{selected_match_id}_{selected_deep_dive_player}")
+                with deep_right:
+                    if not player_heatmap_df.empty:
+                        st.plotly_chart(create_player_heatmap(player_heatmap_df), width="stretch", key=f"guided_player_heatmap_{selected_match_id}_{selected_deep_dive_player}")
+                    else:
+                        player_shot_df = player_deep_dive.get("shot_df", pd.DataFrame())
+                        if isinstance(player_shot_df, pd.DataFrame) and not player_shot_df.empty:
+                            st.plotly_chart(create_match_shot_map(player_shot_df), width="stretch", key=f"guided_player_shots_{selected_match_id}_{selected_deep_dive_player}")
+                        else:
+                            st.info("Heatmap or shot data is unavailable for this player.")
+        with player_tabs[2]:
+            if season_player_performance_df.empty:
+                st.info("Season player performance data is unavailable.")
+            else:
+                st.plotly_chart(create_season_performance_chart(season_player_performance_df), width="stretch", key="guided_season_performance")
+                st.dataframe(season_player_performance_df, width="stretch", hide_index=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with player_right:
+        st.markdown('<div class="panel">', unsafe_allow_html=True)
+        st.subheader("7. Coach & Output")
+        st.caption("分析を次戦準備と共有用アウトプットに変換します。")
+        output_tabs = st.tabs(["Coach", "Reports", "News & Injuries"])
+        with output_tabs[0]:
+            st.write(coach_takeaways["staff_note"])
+            for line in coach_takeaways["continue"]:
+                st.write(f"- Continue: {line}")
+            for line in coach_takeaways["change"]:
+                st.write(f"- Change: {line}")
+            for line in opponent_game_plan_lines:
+                st.write(f"- Plan: {line}")
+        with output_tabs[1]:
+            st.download_button(
+                "Download Match Report (.md)",
+                data=full_match_report,
+                file_name=f"arsenal-report-{selected_match['match_id']}.md",
+                mime="text/markdown",
+                use_container_width=True,
+                key=f"guided_report_download_{selected_match_id}",
+            )
+            st.download_button(
+                "Download X Post Pack (.txt)",
+                data=x_post_pack,
+                file_name=f"arsenal-x-post-{selected_match['match_id']}.txt",
+                mime="text/plain",
+                use_container_width=True,
+                key=f"guided_x_post_download_{selected_match_id}",
+            )
+            with st.expander("X Post Preview"):
+                st.text_area("X post / thread draft", value=x_post_pack, height=320, key=f"guided_x_post_preview_{selected_match_id}")
+        with output_tabs[2]:
+            st.write("**Injuries**")
+            st.dataframe(injury_df, width="stretch", hide_index=True)
+            st.write("**News**")
+            if news_df.empty:
+                st.info("News is temporarily unavailable.")
+            else:
+                for item in news_df.to_dict("records")[:4]:
+                    link = item.get("link", "")
+                    title = item.get("title", "Untitled")
+                    if link:
+                        st.markdown(f'<div class="news-item"><a href="{link}">{title}</a></div>', unsafe_allow_html=True)
+                    else:
+                        st.write(title)
+                    st.caption(item.get("source", "Source"))
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    chat_key = f"analyst_chat_{selected_match_id}"
+    active_chat_key = st.session_state.get("active_analyst_chat_key")
+    if active_chat_key != chat_key:
+        st.session_state["active_analyst_chat_key"] = chat_key
+        st.session_state[chat_key] = [
+            {
+                "role": "assistant",
+                "content": (
+                    f"{selected_match['opponent']} 戦を見ながら深掘りできます。"
+                    "『なぜ勝てた？』『どの時間帯で押し込んだ？』『誰がThreat Zoneを作った？』のように聞いてください。"
+                ),
+            }
+        ]
+    if chat_key not in st.session_state:
+        st.session_state[chat_key] = []
+    st.markdown('<div class="panel">', unsafe_allow_html=True)
+    st.subheader("8. Arsenal Analyst Chat")
+    st.caption("最後に疑問を深掘りします。ここまでの章で見たデータを使って質問できます。")
+    prompt_cols = st.columns(4)
+    suggested_prompts = ["なぜ勝てた？", "どの時間帯で優位だった？", "誰がThreat Zoneを作った？", "次戦に活かすなら？"]
+    for index, prompt in enumerate(suggested_prompts):
+        if prompt_cols[index].button(prompt, use_container_width=True, key=f"guided_prompt_{index}_{selected_match_id}"):
+            st.session_state[chat_key].append({"role": "user", "content": prompt})
+            st.session_state[chat_key].append({"role": "assistant", "content": generate_analyst_answer(prompt, match_context_bundle)})
+    for message in st.session_state[chat_key]:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+    user_question = st.chat_input("この試合の勝因・敗因・流れについて聞く", key=f"guided_chat_input_{selected_match_id}")
+    if user_question:
+        st.session_state[chat_key].append({"role": "user", "content": user_question})
+        st.session_state[chat_key].append({"role": "assistant", "content": generate_analyst_answer(user_question, match_context_bundle)})
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
+    st.stop()
 
 st.markdown('<div class="panel">', unsafe_allow_html=True)
 st.subheader(f"Current Mode: {view_mode}")
