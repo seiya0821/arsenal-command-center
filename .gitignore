@@ -1,1 +1,15 @@
 __pycache__/
+venv/
+logs/
+.DS_Store
+.streamlit/secrets.toml
+
+# Local Mac launch helpers. These are useful on this Mac, but not needed on Streamlit Cloud.
+com.sk.arsenal-dashboard.plist
+open_dashboard.command
+open_dashboard_app.sh
+start_dashboard.sh
+
+# Unrelated local experiment app.
+wanday_app.py
+wanday_data.json
