@@ -3069,17 +3069,17 @@ def render_player_focus_card(
     player_deep_dive: dict[str, object],
     player_impact_df: pd.DataFrame,
 ) -> None:
-    st.metric("Selected Player", selected_player)
+    st.metric("選択中の選手", selected_player)
     if selected_player != key_player_name:
-        st.caption(f"Model key player: {key_player_name}. 現在はクリックした選手の詳細に切り替えています。")
+        st.caption(f"モデル上のキープレイヤー: {key_player_name}。現在はクリックした選手の詳細に切り替えています。")
     metrics = st.columns(3)
-    metrics[0].metric("Rating", player_deep_dive.get("rating") or "N/A")
-    metrics[1].metric("Touches", player_deep_dive.get("touches", 0))
+    metrics[0].metric("評価点", player_deep_dive.get("rating") or "N/A")
+    metrics[1].metric("タッチ数", player_deep_dive.get("touches", 0))
     metrics[2].metric("xG", f"{float(player_deep_dive.get('xg', 0.0)):.2f}")
     metrics = st.columns(3)
-    metrics[0].metric("Final-third Passes", player_deep_dive.get("final_third_passes", 0))
-    metrics[1].metric("Recoveries", player_deep_dive.get("recoveries", 0))
-    metrics[2].metric("Hub Score", f"{float(player_deep_dive.get('hub_score', 0.0)):.2f}")
+    metrics[0].metric("ファイナルサードへのパス", player_deep_dive.get("final_third_passes", 0))
+    metrics[1].metric("回収", player_deep_dive.get("recoveries", 0))
+    metrics[2].metric("ハブスコア", f"{float(player_deep_dive.get('hub_score', 0.0)):.2f}")
     for line in build_player_focus_reasons(
         selected_player,
         key_player_name,
@@ -3669,7 +3669,7 @@ if "dashboard_mode" not in st.session_state:
     st.session_state["dashboard_mode"] = "Team Analytics"
 
 with st.sidebar:
-    st.header("Command Center")
+    st.header("コマンドセンター")
     refresh_options = {
         "Off": 0,
         "5 min": 5,
@@ -3678,24 +3678,26 @@ with st.sidebar:
         "1 hour": 60,
         "1 day": 1440,
     }
-    refresh_label = st.selectbox("Auto refresh", options=list(refresh_options.keys()), index=5)
+    refresh_label = st.selectbox("自動更新", options=list(refresh_options.keys()), index=5)
     refresh_minutes = refresh_options[refresh_label]
     competition_filter = st.multiselect(
-        "Competitions",
+        "大会",
         options=competition_options,
         default=competition_options,
     )
     view_mode = st.radio(
-        "Mode",
+        "モード",
         options=["Team Analytics", "Player Analytics"],
         horizontal=True,
         key="dashboard_mode",
+        format_func=lambda value: {"Team Analytics": "チーム分析", "Player Analytics": "選手分析"}.get(value, value),
     )
     layout_mode = st.radio(
-        "Layout",
+        "表示形式",
         options=["Guided Story", "Full Detail"],
         index=0,
-        help="Guided Story は文脈順に読む画面、Full Detail は全パネルを細かく見る画面です。",
+        format_func=lambda value: {"Guided Story": "文脈順に読む", "Full Detail": "詳細をすべて見る"}.get(value, value),
+        help="文脈順に読む画面、または全パネルを細かく見る画面を選べます。",
     )
 
 inject_auto_refresh(refresh_minutes * 60)
@@ -3730,7 +3732,7 @@ recent_benchmark_df, recent_benchmark_notes = build_recent_results_benchmark(fil
 default_match = filtered_matches[filtered_matches["finished"]].head(1)
 default_match_id = default_match["match_id"].iloc[0] if not default_match.empty else filtered_matches["match_id"].iloc[0]
 selected_match_id = st.selectbox(
-    "Selected Match",
+    "対象試合",
     options=filtered_matches["match_id"],
     index=list(filtered_matches["match_id"]).index(default_match_id),
     format_func=lambda match_id: build_match_label(filtered_matches.loc[filtered_matches["match_id"] == match_id].iloc[0]),
@@ -3990,32 +3992,32 @@ match_context_bundle = build_match_context_bundle(
 )
 
 top_metrics_row_one = st.columns(3)
-top_metrics_row_one[0].metric("Competition", selected_match["competition"])
-top_metrics_row_one[1].metric("Match Date", selected_match["date"].strftime("%d %b %Y") if pd.notna(selected_match["date"]) else "TBD")
-top_metrics_row_one[2].metric("Opponent", selected_match["opponent"])
+top_metrics_row_one[0].metric("大会", selected_match["competition"])
+top_metrics_row_one[1].metric("試合日", selected_match["date"].strftime("%d %b %Y") if pd.notna(selected_match["date"]) else "未定")
+top_metrics_row_one[2].metric("対戦相手", selected_match["opponent"])
 top_metrics_row_two = st.columns(3)
-top_metrics_row_two[0].metric("Score", selected_match["score"])
-top_metrics_row_two[1].metric("Recent Form", recent_form_string, help=f"Selected competitions における直近 {recent_form_matches} 試合の結果。W=win, D=draw, L=loss")
-top_metrics_row_two[2].metric("Selected Record", selected_record, help="現在の competition filter で選ばれている試合群の通算 W-D-L")
+top_metrics_row_two[0].metric("スコア", selected_match["score"])
+top_metrics_row_two[1].metric("直近フォーム", recent_form_string, help=f"選択中の大会における直近 {recent_form_matches} 試合の結果。W=勝利, D=引き分け, L=敗戦")
+top_metrics_row_two[2].metric("選択範囲の成績", selected_record, help="現在の大会フィルターで選ばれている試合群の通算 W-D-L")
 
 if layout_mode == "Guided Story":
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("1. Match Context")
+    st.subheader("1. 試合の前提")
     st.caption("まず試合の前提と結論を押さえます。ここで結果、相手、会場、試合の読み筋を固定してから細部に入ります。")
     context_left, context_right = st.columns([0.95, 1.05])
     with context_left:
         context_metrics = st.columns(2)
-        context_metrics[0].metric("Venue", selected_match["venue"])
-        context_metrics[1].metric("Result", selected_match["result"])
+        context_metrics[0].metric("会場", selected_match["venue"])
+        context_metrics[1].metric("結果", selected_match["result"])
         context_metrics = st.columns(2)
-        context_metrics[0].metric("Goals For", int(selected_match["arsenal_goals"]) if pd.notna(selected_match["arsenal_goals"]) else 0)
-        context_metrics[1].metric("Goals Against", int(selected_match["opponent_goals"]) if pd.notna(selected_match["opponent_goals"]) else 0)
+        context_metrics[0].metric("得点", int(selected_match["arsenal_goals"]) if pd.notna(selected_match["arsenal_goals"]) else 0)
+        context_metrics[1].metric("失点", int(selected_match["opponent_goals"]) if pd.notna(selected_match["opponent_goals"]) else 0)
         st.write(f"**Arsenal はどうだったか**  {match_how_line}")
         st.write(f"**なぜこの結果になったか**  {match_why_line}")
         st.write(f"**何が足りなかったか**  {match_missing_line}")
     with context_right:
         render_match_review(review_title, review_lines)
-        with st.expander("Recent form benchmark", expanded=True):
+        with st.expander("直近成績のベンチマーク", expanded=True):
             for note in recent_benchmark_notes:
                 st.write(f"- {note}")
             st.plotly_chart(
@@ -4026,22 +4028,22 @@ if layout_mode == "Guided Story":
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("2. Result Drivers")
+    st.subheader("2. 結果を動かした要因")
     st.caption("次に、勝敗を直接押した要素を確認します。xG、中央侵入、セットプレー、キープレイヤーを近くに置いて読めるようにしています。")
     driver_left, driver_right = st.columns([1.05, 0.95])
     with driver_left:
         signal_cols = st.columns(4)
         signal_cols[0].metric("Arsenal xG", f"{shot_profile['xg']:.2f}")
-        signal_cols[1].metric("Opponent xG", f"{opp_shot_profile['xg']:.2f}")
-        signal_cols[2].metric("Central Shots", shot_profile["central_shots"])
-        signal_cols[3].metric("Final-third Passes", f"{tactical_summary['final_third_passes']:.0f}")
+        signal_cols[1].metric("相手 xG", f"{opp_shot_profile['xg']:.2f}")
+        signal_cols[2].metric("中央シュート", shot_profile["central_shots"])
+        signal_cols[3].metric("ファイナルサードへのパス", f"{tactical_summary['final_third_passes']:.0f}")
         edge_cols = st.columns(2)
         with edge_cols[0]:
-            st.write("**Arsenal Edge**")
+            st.write("**Arsenalの優位**")
             for line in arsenal_edges or ["明確な優位は限定的で、細部勝負の試合でした。"]:
                 st.write(f"- {line}")
         with edge_cols[1]:
-            st.write("**Opponent Threat**")
+            st.write("**相手の脅威**")
             for line in opponent_edges or ["相手の脅威は大きくなく、Arsenal が主導権を持てた試合でした。"]:
                 st.write(f"- {line}")
     with driver_right:
@@ -4053,7 +4055,7 @@ if layout_mode == "Guided Story":
             player_impact_df,
         )
         if deep_dive_candidates:
-            st.caption("Click a player to change this card and the Player Layer deep dive.")
+            st.caption("選手をクリックすると、このカードと選手深掘りが切り替わります。")
             button_cols = st.columns(min(4, len(deep_dive_candidates)))
             for idx, player_name in enumerate(deep_dive_candidates[:4]):
                 if button_cols[idx].button(player_name, key=f"guided_deep_dive_button_{selected_match_id}_{player_name}", use_container_width=True):
@@ -4064,9 +4066,9 @@ if layout_mode == "Guided Story":
     flow_left, flow_right = st.columns([1.05, 0.95])
     with flow_left:
         st.markdown('<div class="panel">', unsafe_allow_html=True)
-        st.subheader("3. Game Flow")
+        st.subheader("3. 試合の流れ")
         st.caption("どの時間帯で試合が傾いたかを見ます。xG Race、時間帯別xG、スコア状態をまとめて置いています。")
-        flow_tabs = st.tabs(["xG Race", "Phase Control", "Score State", "Events"])
+        flow_tabs = st.tabs(["xG推移", "時間帯別支配", "スコア状況別", "イベント"])
         with flow_tabs[0]:
             st.plotly_chart(create_xg_race_chart(xg_race_df), width="stretch", key=f"guided_xg_race_{selected_match_id}")
             for note in match_swing_notes:
@@ -4077,7 +4079,7 @@ if layout_mode == "Guided Story":
                 st.write(f"- {line}")
         with flow_tabs[2]:
             if score_state_df.empty:
-                st.info("Score-state data is unavailable for this match.")
+                st.info("この試合ではスコア状況別データを利用できません。")
             else:
                 st.plotly_chart(create_score_state_chart(score_state_df), width="stretch", key=f"guided_score_state_{selected_match_id}")
                 st.dataframe(score_state_df, width="stretch", hide_index=True)
@@ -4088,19 +4090,19 @@ if layout_mode == "Guided Story":
 
     with flow_right:
         st.markdown('<div class="panel">', unsafe_allow_html=True)
-        st.subheader("4. Chance & Territory")
+        st.subheader("4. チャンスと陣地")
         st.caption("流れの次に、どこまで前進でき、どれだけ良いチャンスに変換できたかを確認します。")
         chance_cols = st.columns(2)
-        chance_cols[0].metric("Open Play xG", f"{shot_profile['open_play_xg']:.2f}")
-        chance_cols[1].metric("Set Piece xG", f"{shot_profile['set_piece_xg']:.2f}")
+        chance_cols[0].metric("オープンプレー xG", f"{shot_profile['open_play_xg']:.2f}")
+        chance_cols[1].metric("セットプレー xG", f"{shot_profile['set_piece_xg']:.2f}")
         chance_cols = st.columns(2)
-        chance_cols[0].metric("Box Shots", shot_profile["box_shots"])
-        chance_cols[1].metric("Field Tilt Proxy", f"{control_profile['field_tilt_proxy']:.0f}%")
+        chance_cols[0].metric("ボックス内シュート", shot_profile["box_shots"])
+        chance_cols[1].metric("押し込み度 proxy", f"{control_profile['field_tilt_proxy']:.0f}%")
         st.plotly_chart(create_final_third_access_chart(player_df), width="stretch", key=f"guided_final_third_{selected_match_id}")
         st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("5. Tactical Structure")
+    st.subheader("5. 戦術構造")
     st.caption("ここで構造を読みます。保持、脅威ゾーン、プレッシング、守備、選手関係性を同じ章にまとめています。")
     if control_room_lines:
         control_cols = st.columns(len(control_room_lines))
@@ -4115,7 +4117,7 @@ if layout_mode == "Guided Story":
                 """,
                 unsafe_allow_html=True,
             )
-    structure_tabs = st.tabs(["Threat Zones", "Build-up", "Pressing", "Structural Diagnosis", "Maps"])
+    structure_tabs = st.tabs(["脅威ゾーン", "ビルドアップ", "プレッシング", "構造診断", "マップ"])
     with structure_tabs[0]:
         tz_left, tz_right = st.columns([1.12, 0.88])
         with tz_left:
@@ -4158,7 +4160,7 @@ if layout_mode == "Guided Story":
             for line in opponent_possession_review_lines[:3]:
                 st.write(f"- {line}")
     with structure_tabs[4]:
-        map_tabs = st.tabs(["Shot Map", "Pass Network", "Relationships"])
+        map_tabs = st.tabs(["シュートマップ", "パスネットワーク", "関係性"])
         with map_tabs[0]:
             st.plotly_chart(create_match_shot_map(shot_df) if not shot_df.empty else create_shot_threat_map(player_df), width="stretch", key=f"guided_shot_map_{selected_match_id}")
         with map_tabs[1]:
@@ -4167,7 +4169,7 @@ if layout_mode == "Guided Story":
             rel_left, rel_right = st.columns([1.0, 1.0])
             with rel_left:
                 if relationship_hubs_df.empty:
-                    st.info("Relationship data is unavailable for this match.")
+                    st.info("この試合では関係性データを利用できません。")
                 else:
                     st.plotly_chart(create_hub_chart(relationship_hubs_df), width="stretch", key=f"guided_hub_chart_{selected_match_id}")
             with rel_right:
@@ -4178,9 +4180,9 @@ if layout_mode == "Guided Story":
     player_left, player_right = st.columns([1.05, 0.95])
     with player_left:
         st.markdown('<div class="panel">', unsafe_allow_html=True)
-        st.subheader("6. Player Layer")
+        st.subheader("6. 選手レイヤー")
         st.caption("最後に選手へ降ります。試合単位の貢献とシーズン全体の評価を分けて見ます。")
-        player_tabs = st.tabs(["Match Impact", "Deep Dive", "Season"])
+        player_tabs = st.tabs(["試合への影響", "選手深掘り", "シーズン"])
         with player_tabs[0]:
             st.dataframe(player_impact_df, width="stretch", hide_index=True)
             st.dataframe(role_profile_df, width="stretch", hide_index=True)
@@ -4197,10 +4199,10 @@ if layout_mode == "Guided Story":
                         if isinstance(player_shot_df, pd.DataFrame) and not player_shot_df.empty:
                             st.plotly_chart(create_match_shot_map(player_shot_df), width="stretch", key=f"guided_player_shots_{selected_match_id}_{selected_deep_dive_player}")
                         else:
-                            st.info("Heatmap or shot data is unavailable for this player.")
+                            st.info("この選手のヒートマップまたはシュートデータを利用できません。")
         with player_tabs[2]:
             if season_player_performance_df.empty:
-                st.info("Season player performance data is unavailable.")
+                st.info("シーズン選手評価データを利用できません。")
             else:
                 st.plotly_chart(create_season_performance_chart(season_player_performance_df), width="stretch", key="guided_season_performance")
                 st.dataframe(season_player_performance_df, width="stretch", hide_index=True)
@@ -4208,9 +4210,9 @@ if layout_mode == "Guided Story":
 
     with player_right:
         st.markdown('<div class="panel">', unsafe_allow_html=True)
-        st.subheader("7. Coach & Output")
+        st.subheader("7. 監督視点とアウトプット")
         st.caption("分析を次戦準備と共有用アウトプットに変換します。")
-        output_tabs = st.tabs(["Coach", "Reports", "News & Injuries"])
+        output_tabs = st.tabs(["監督視点", "レポート", "ニュース・怪我"])
         with output_tabs[0]:
             st.write(coach_takeaways["staff_note"])
             for line in coach_takeaways["continue"]:
@@ -4221,7 +4223,7 @@ if layout_mode == "Guided Story":
                 st.write(f"- Plan: {line}")
         with output_tabs[1]:
             st.download_button(
-                "Download Match Report (.md)",
+                "マッチレポートをダウンロード (.md)",
                 data=full_match_report,
                 file_name=f"arsenal-report-{selected_match['match_id']}.md",
                 mime="text/markdown",
@@ -4229,7 +4231,7 @@ if layout_mode == "Guided Story":
                 key=f"guided_report_download_{selected_match_id}",
             )
             st.download_button(
-                "Download X Post Pack (.txt)",
+                "X投稿パックをダウンロード (.txt)",
                 data=x_post_pack,
                 file_name=f"arsenal-x-post-{selected_match['match_id']}.txt",
                 mime="text/plain",
@@ -4237,13 +4239,13 @@ if layout_mode == "Guided Story":
                 key=f"guided_x_post_download_{selected_match_id}",
             )
             with st.expander("X Post Preview"):
-                st.text_area("X post / thread draft", value=x_post_pack, height=320, key=f"guided_x_post_preview_{selected_match_id}")
+                st.text_area("X投稿 / スレッド案", value=x_post_pack, height=320, key=f"guided_x_post_preview_{selected_match_id}")
         with output_tabs[2]:
-            st.write("**Injuries**")
+            st.write("**怪我・離脱**")
             st.dataframe(injury_df, width="stretch", hide_index=True)
-            st.write("**News**")
+            st.write("**ニュース**")
             if news_df.empty:
-                st.info("News is temporarily unavailable.")
+                st.info("ニュースを一時的に取得できません。")
             else:
                 for item in news_df.to_dict("records")[:4]:
                     link = item.get("link", "")
@@ -4271,7 +4273,7 @@ if layout_mode == "Guided Story":
     if chat_key not in st.session_state:
         st.session_state[chat_key] = []
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("8. Arsenal Analyst Chat")
+    st.subheader("8. Arsenal分析チャット")
     st.caption("最後に疑問を深掘りします。ここまでの章で見たデータを使って質問できます。")
     prompt_cols = st.columns(4)
     suggested_prompts = ["なぜ勝てた？", "どの時間帯で優位だった？", "誰がThreat Zoneを作った？", "次戦に活かすなら？"]
@@ -4291,21 +4293,21 @@ if layout_mode == "Guided Story":
     st.stop()
 
 st.markdown('<div class="panel">', unsafe_allow_html=True)
-st.subheader(f"Current Mode: {view_mode}")
+st.subheader(f"現在のモード: {'選手分析' if view_mode == 'Player Analytics' else 'チーム分析'}")
 render_section_benefit("Current Mode")
 if view_mode == "Player Analytics":
-    st.caption("Player Analytics is active. The dashboard is prioritizing player-level match impact and deep-dive views.")
+    st.caption("選手分析が有効です。選手単位の試合影響度と深掘りを優先して表示します。")
 else:
-    st.caption("Team Analytics is active. The dashboard is prioritizing match-level and team-level tactical views.")
+    st.caption("チーム分析が有効です。試合全体とチーム戦術の分析を優先して表示します。")
 st.markdown("</div>", unsafe_allow_html=True)
 
 if view_mode == "Player Analytics":
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("Player Matchboard")
+    st.subheader("選手マッチボード")
     render_section_benefit("Player Matchboard")
     if deep_dive_candidates:
         top_player = st.selectbox(
-            "Primary player focus",
+            "注目選手",
             options=deep_dive_candidates,
             index=deep_dive_candidates.index(st.session_state[deep_dive_state_key]),
             key=f"top_player_focus_{selected_match_id}",
@@ -4322,9 +4324,9 @@ if view_mode == "Player Analytics":
         top_left, top_right = st.columns([1.0, 1.0])
         with top_left:
             top_metrics = st.columns(4)
-            top_metrics[0].metric("Rating", top_player_dive.get("rating") or "N/A")
-            top_metrics[1].metric("Touches", top_player_dive.get("touches", 0))
-            top_metrics[2].metric("Final-third Passes", top_player_dive.get("final_third_passes", 0))
+            top_metrics[0].metric("評価点", top_player_dive.get("rating") or "N/A")
+            top_metrics[1].metric("タッチ数", top_player_dive.get("touches", 0))
+            top_metrics[2].metric("ファイナルサードへのパス", top_player_dive.get("final_third_passes", 0))
             top_metrics[3].metric("xG", f"{top_player_dive.get('xg', 0.0):.2f}")
             st.plotly_chart(
                 create_player_stat_bar(top_player_dive),
@@ -4340,38 +4342,38 @@ if view_mode == "Player Analytics":
                     key=f"top_player_shot_map_{selected_match_id}_{st.session_state[deep_dive_state_key]}",
                 )
             else:
-                st.info("No recorded shots for this player in the selected match.")
+                st.info("この選手のシュート記録はありません。")
     else:
-        st.info("Player match data is unavailable for the selected fixture.")
+        st.info("この試合の選手データを利用できません。")
     st.markdown("</div>", unsafe_allow_html=True)
 
 summary_col, trend_col = st.columns([1.05, 1.35])
 
 with summary_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("Match Center")
+    st.subheader("試合センター")
     render_section_benefit("Match Center")
     detail_left, detail_right = st.columns(2)
-    detail_left.metric("Venue", selected_match["venue"])
-    detail_left.metric("Result", selected_match["result"])
-    detail_left.metric("Goals For", int(selected_match["arsenal_goals"]) if pd.notna(selected_match["arsenal_goals"]) else 0)
-    detail_right.metric("Goals Against", int(selected_match["opponent_goals"]) if pd.notna(selected_match["opponent_goals"]) else 0)
-    detail_right.metric("Status", selected_match["status"])
-    detail_right.metric("Last Lineup", last_lineup.get("formation", "Unavailable"))
+    detail_left.metric("会場", selected_match["venue"])
+    detail_left.metric("結果", selected_match["result"])
+    detail_left.metric("得点", int(selected_match["arsenal_goals"]) if pd.notna(selected_match["arsenal_goals"]) else 0)
+    detail_right.metric("失点", int(selected_match["opponent_goals"]) if pd.notna(selected_match["opponent_goals"]) else 0)
+    detail_right.metric("状態", selected_match["status"])
+    detail_right.metric("直近フォーメーション", last_lineup.get("formation", "不明"))
     if next_match:
         st.write(
-            f"Next up: {next_match['opponent']['name']} in the {normalize_competition(next_match['tournament']['name'])} "
-            f"on {parse_dt(next_match['status']['utcTime']).strftime('%d %b %Y %H:%M UTC')}."
+            f"次戦: {next_match['opponent']['name']} / {normalize_competition(next_match['tournament']['name'])} / "
+            f"{parse_dt(next_match['status']['utcTime']).strftime('%d %b %Y %H:%M UTC')}"
         )
     st.caption(
-        "Scott Willis-inspired lens: chance quality, central box access, final-third progression, and lane bias."
+        "Scott Willis的な観点: チャンス品質、中央ボックス侵入、ファイナルサードへの前進、レーンの偏り。"
     )
-    st.caption("Recent Form は直近試合の並び、Selected Record は現在の絞り込み範囲での通算成績です。")
+    st.caption("直近フォームは直近試合の並び、選択範囲の成績は現在の絞り込み範囲での通算成績です。")
     st.markdown("</div>", unsafe_allow_html=True)
 
 with trend_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("Recent Results")
+    st.subheader("直近成績")
     render_section_benefit("Recent Results")
     completed = filtered_matches[filtered_matches["finished"]].sort_values("date")
     result_fig = go.Figure()
@@ -4434,21 +4436,21 @@ with review_col:
 
 with notes_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("Key Match Signals")
+    st.subheader("試合の主要シグナル")
     render_section_benefit("Key Match Signals")
     key_metrics = st.columns(2)
-    key_metrics[0].metric("Open Play xG", f"{shot_profile['open_play_xg']:.2f}")
-    key_metrics[1].metric("Set Piece xG", f"{shot_profile['set_piece_xg']:.2f}")
+    key_metrics[0].metric("オープンプレー xG", f"{shot_profile['open_play_xg']:.2f}")
+    key_metrics[1].metric("セットプレー xG", f"{shot_profile['set_piece_xg']:.2f}")
     key_metrics = st.columns(2)
-    key_metrics[0].metric("Central Shots", shot_profile["central_shots"])
-    key_metrics[1].metric("Final-Third Passes", f"{tactical_summary['final_third_passes']:.0f}")
+    key_metrics[0].metric("中央シュート", shot_profile["central_shots"])
+    key_metrics[1].metric("ファイナルサードへのパス", f"{tactical_summary['final_third_passes']:.0f}")
     st.markdown("</div>", unsafe_allow_html=True)
 
 verdict_col, player_col = st.columns([1.15, 0.85])
 
 with verdict_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("What This Match Says")
+    st.subheader("この試合が示すこと")
     render_section_benefit("What This Match Says")
     st.write(f"**Arsenal はどうだったか**  {match_how_line}")
     st.write(f"**なぜこの結果になったか**  {match_why_line}")
@@ -4457,7 +4459,7 @@ with verdict_col:
 
 with player_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("Key Player Verdict")
+    st.subheader("キープレイヤー診断")
     render_section_benefit("Key Player Verdict")
     render_player_focus_card(
         selected_deep_dive_player,
@@ -4467,7 +4469,7 @@ with player_col:
         player_impact_df,
     )
     if deep_dive_candidates:
-        st.caption("Click to change this card and the Player Deep Dive section.")
+        st.caption("クリックすると、このカードと選手深掘りセクションが切り替わります。")
         button_cols = st.columns(min(4, len(deep_dive_candidates)))
         for idx, player_name in enumerate(deep_dive_candidates[:4]):
             if button_cols[idx].button(player_name, key=f"deep_dive_button_{selected_match_id}_{player_name}", use_container_width=True):
@@ -4476,7 +4478,7 @@ with player_col:
     st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown('<div class="panel">', unsafe_allow_html=True)
-st.subheader("Match Control Room")
+st.subheader("試合コントロールルーム")
 render_section_benefit("Match Control Room")
 st.caption("試合を直感的に読むための4層です。xT/pressing/possession は公開FotMobデータから作るproxyなので、映像分析の入り口として使います。")
 if control_room_lines:
@@ -4492,7 +4494,7 @@ if control_room_lines:
             """,
             unsafe_allow_html=True,
         )
-control_tabs = st.tabs(["Threat Zones", "Attacking Waves", "Build-up Shape", "Pressing Lens"])
+control_tabs = st.tabs(["脅威ゾーン", "攻撃の波", "ビルドアップ構造", "プレッシング"])
 with control_tabs[0]:
     render_section_benefit("Threat Zones")
     threat_left, threat_right = st.columns([1.15, 0.85])
@@ -4513,12 +4515,12 @@ with control_tabs[0]:
             column_config={
                 "Zone": st.column_config.TextColumn("Zone", width="medium"),
                 "Threat": st.column_config.NumberColumn("Threat", format="%.2f"),
-                "Primary Builder": st.column_config.TextColumn("Primary Builder", width="medium"),
-                "Top Contributors": st.column_config.TextColumn("Top Contributors", width="large"),
-                "Main Shooter": st.column_config.TextColumn("Main Shooter", width="medium"),
-                "Shot xG": st.column_config.NumberColumn("Shot xG", format="%.2f"),
-                "Progression proxy": st.column_config.NumberColumn("Progression proxy", format="%.2f"),
-                "Shots": st.column_config.NumberColumn("Shots"),
+                "Primary Builder": st.column_config.TextColumn("主なビルドアップ関与者", width="medium"),
+                "Top Contributors": st.column_config.TextColumn("上位関与者", width="large"),
+                "Main Shooter": st.column_config.TextColumn("主なシューター", width="medium"),
+                "Shot xG": st.column_config.NumberColumn("シュートxG", format="%.2f"),
+                "Progression proxy": st.column_config.NumberColumn("前進proxy", format="%.2f"),
+                "Shots": st.column_config.NumberColumn("シュート数"),
             },
         )
 with control_tabs[1]:
@@ -4587,24 +4589,24 @@ coach_col, prep_col = st.columns([1.0, 1.0])
 
 with coach_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("Coach Takeaways")
+    st.subheader("監督向け示唆")
     render_section_benefit("Coach Takeaways")
     st.write(coach_takeaways["staff_note"])
     for line in coach_takeaways["continue"]:
-        st.write(f"- Continue: {line}")
+        st.write(f"- 継続: {line}")
     for line in coach_takeaways["change"]:
-        st.write(f"- Change: {line}")
+        st.write(f"- 修正: {line}")
     st.markdown("</div>", unsafe_allow_html=True)
 
 with prep_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("Next Match Prep")
+    st.subheader("次戦への準備")
     render_section_benefit("Next Match Prep")
     st.write(coach_takeaways["next_up"])
     for line in coach_takeaways["selection"]:
-        st.write(f"- Selection: {line}")
+        st.write(f"- 起用: {line}")
     for line in opponent_game_plan_lines:
-        st.write(f"- Plan: {line}")
+        st.write(f"- プラン: {line}")
     if next_match:
         st.write("監督目線では、この試合で機能した構造をベースに、修正ポイントだけを次戦用に最適化するのが自然です。")
     st.markdown("</div>", unsafe_allow_html=True)
@@ -4613,7 +4615,7 @@ structure_left, structure_right = st.columns([1.1, 0.9])
 
 with structure_left:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("Structural Diagnosis")
+    st.subheader("構造診断")
     render_section_benefit("Structural Diagnosis")
     st.plotly_chart(
         create_structural_diagnosis_chart(structural_diagnosis_df),
@@ -4624,7 +4626,7 @@ with structure_left:
 
 with structure_right:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("Why Structurally")
+    st.subheader("構造的に見た理由")
     render_section_benefit("Why Structurally")
     for line in structural_summary_lines:
         st.write(f"- {line}")
@@ -4636,7 +4638,7 @@ with structure_right:
             column_config={
                 "Factor": st.column_config.TextColumn("Factor", width="medium"),
                 "Signal": st.column_config.TextColumn("Signal", width="large"),
-                "Why": st.column_config.TextColumn("Why it matters", width="large"),
+                "Why": st.column_config.TextColumn("なぜ重要か", width="large"),
             },
         )
     st.markdown("</div>", unsafe_allow_html=True)
@@ -4645,7 +4647,7 @@ attack_col, opp_pos_col = st.columns([1.0, 1.0])
 
 with attack_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("Attack Review")
+    st.subheader("攻撃レビュー")
     render_section_benefit("Attack Review")
     for line in attack_review_lines:
         st.write(f"- {line}")
@@ -4653,7 +4655,7 @@ with attack_col:
 
 with opp_pos_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("Opponent Possession Review")
+    st.subheader("相手保持レビュー")
     render_section_benefit("Opponent Possession Review")
     for line in opponent_possession_review_lines:
         st.write(f"- {line}")
@@ -4663,7 +4665,7 @@ half_col, role_col = st.columns([1.0, 1.0])
 
 with half_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("Half-by-Half Adjustments")
+    st.subheader("前後半の変化")
     render_section_benefit("Half-by-Half Adjustments")
     st.plotly_chart(
         create_phase_comparison_chart(phase_comparison_df),
@@ -4676,7 +4678,7 @@ with half_col:
 
 with role_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("Role Evaluation")
+    st.subheader("役割評価")
     render_section_benefit("Role Evaluation")
     st.dataframe(
         role_profile_df,
@@ -4694,7 +4696,7 @@ phase_col, zone_col = st.columns([1.05, 0.95])
 
 with phase_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("Phase Control")
+    st.subheader("時間帯別の支配")
     render_section_benefit("Phase Control")
     st.caption("どの時間帯で優位だったかを xG ベースで分解。")
     st.plotly_chart(create_phase_split_chart(arsenal_phase_df, opponent_phase_df), width="stretch")
@@ -4702,7 +4704,7 @@ with phase_col:
 
 with zone_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("Zone Profile")
+    st.subheader("ゾーン別プロフィール")
     render_section_benefit("Zone Profile")
     zone_metrics = st.columns(2)
     zone_metrics[0].metric("Zone 14 Shots", arsenal_zone_profile["zone14_entries"])
@@ -4722,7 +4724,7 @@ driver_col, threat_col = st.columns([1.0, 1.0])
 
 with driver_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("Arsenal Edge")
+    st.subheader("Arsenalの優位")
     render_section_benefit("Arsenal Edge")
     if arsenal_edges:
         for line in arsenal_edges:
@@ -4734,7 +4736,7 @@ with driver_col:
 
 with threat_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("Opponent Threat")
+    st.subheader("相手の脅威")
     render_section_benefit("Opponent Threat")
     if opponent_edges:
         for line in opponent_edges:
@@ -4752,10 +4754,10 @@ with left_col:
     render_section_benefit(view_mode)
     if view_mode == "Team Analytics":
         summary_cards = st.columns(4)
-        summary_cards[0].metric("Wins", team_summary["wins"])
-        summary_cards[1].metric("Draws", team_summary["draws"])
-        summary_cards[2].metric("Losses", team_summary["losses"])
-        summary_cards[3].metric("Goal Diff", team_summary["goals"] - team_summary["conceded"])
+        summary_cards[0].metric("勝利", team_summary["wins"])
+        summary_cards[1].metric("引き分け", team_summary["draws"])
+        summary_cards[2].metric("敗戦", team_summary["losses"])
+        summary_cards[3].metric("得失点差", team_summary["goals"] - team_summary["conceded"])
 
         matchup_table = filtered_matches[
             ["date", "competition", "stage", "venue", "opponent", "score", "result"]
@@ -4779,14 +4781,14 @@ with left_col:
         if player_df.empty:
             st.info("Player analytics are temporarily unavailable.")
         else:
-            player_focus = st.selectbox("Focus Player", options=player_df[player_df["role"] != "Unavailable"]["player"].tolist())
+            player_focus = st.selectbox("注目選手", options=player_df[player_df["role"] != "Unavailable"]["player"].tolist())
             focus_row = player_df.loc[player_df["player"] == player_focus].iloc[0]
             player_metrics = st.columns(5)
-            player_metrics[0].metric("Last Match Rating", focus_row["rating_last_match"] or "N/A")
-            player_metrics[1].metric("Season Goals", int(focus_row["season_goals"] or 0))
-            player_metrics[2].metric("Season Assists", int(focus_row["season_assists"] or 0))
-            player_metrics[3].metric("Season Rating", focus_row["season_rating"] or "N/A")
-            player_metrics[4].metric("Market Value", format_money(focus_row["market_value"]))
+            player_metrics[0].metric("直近試合の評価", focus_row["rating_last_match"] or "N/A")
+            player_metrics[1].metric("シーズン得点", int(focus_row["season_goals"] or 0))
+            player_metrics[2].metric("シーズンアシスト", int(focus_row["season_assists"] or 0))
+            player_metrics[3].metric("シーズン評価", focus_row["season_rating"] or "N/A")
+            player_metrics[4].metric("市場価値", format_money(focus_row["market_value"]))
 
             player_chart = px.bar(
                 player_df[player_df["role"] != "Unavailable"],
@@ -4803,41 +4805,41 @@ with left_col:
             player_table = player_df.rename(
                 columns={
                     "player": "Player",
-                    "role": "Role",
-                    "status": "Status",
-                    "rating_last_match": "Last Match Rating",
-                    "season_goals": "Season Goals",
-                    "season_assists": "Season Assists",
-                    "season_rating": "Season Rating",
-                    "market_value": "Market Value",
+                    "role": "役割",
+                    "status": "状態",
+                    "rating_last_match": "直近試合の評価",
+                    "season_goals": "シーズン得点",
+                    "season_assists": "シーズンアシスト",
+                    "season_rating": "シーズン評価",
+                    "market_value": "市場価値",
                 }
             )[
-                ["Player", "Role", "Status", "Last Match Rating", "Season Goals", "Season Assists", "Season Rating", "Market Value"]
+                ["Player", "役割", "状態", "直近試合の評価", "シーズン得点", "シーズンアシスト", "シーズン評価", "市場価値"]
             ].copy()
-            player_table["Market Value"] = player_table["Market Value"].apply(format_money)
+            player_table["市場価値"] = player_table["市場価値"].apply(format_money)
             st.dataframe(
                 player_table,
                 width="stretch",
                 hide_index=True,
                 column_config={
-                    "Player": st.column_config.TextColumn("Player", width="large"),
-                    "Role": st.column_config.TextColumn("Role", width="small"),
-                    "Status": st.column_config.TextColumn("Status", width="medium"),
-                    "Last Match Rating": st.column_config.TextColumn("Last Match Rating", width="medium"),
-                    "Season Goals": st.column_config.TextColumn("Season Goals", width="small"),
-                    "Season Assists": st.column_config.TextColumn("Season Assists", width="small"),
-                    "Season Rating": st.column_config.TextColumn("Season Rating", width="small"),
-                    "Market Value": st.column_config.TextColumn("Market Value", width="medium"),
+                    "Player": st.column_config.TextColumn("選手", width="large"),
+                    "役割": st.column_config.TextColumn("役割", width="small"),
+                    "状態": st.column_config.TextColumn("状態", width="medium"),
+                    "直近試合の評価": st.column_config.TextColumn("直近試合の評価", width="medium"),
+                    "シーズン得点": st.column_config.TextColumn("シーズン得点", width="small"),
+                    "シーズンアシスト": st.column_config.TextColumn("シーズンアシスト", width="small"),
+                    "シーズン評価": st.column_config.TextColumn("シーズン評価", width="small"),
+                    "市場価値": st.column_config.TextColumn("市場価値", width="medium"),
                 },
             )
     st.markdown("</div>", unsafe_allow_html=True)
 
 with right_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("Top Arsenal Performers")
+    st.subheader("シーズン上位パフォーマー")
     render_section_benefit("Top Arsenal Performers")
     if top_players_df.empty:
-        st.info("Top-player data is unavailable.")
+        st.info("上位選手データを利用できません。")
     else:
         top_chart = px.bar(
             top_players_df,
@@ -4856,7 +4858,7 @@ with right_col:
                 f"**{item['Category']}**: {item['Player']}  |  Value: {item['Value']}  |  Rank: {item['Rank']}"
             )
     if not player_impact_df.empty:
-        st.caption("Match impact ranking")
+        st.caption("試合影響度ランキング")
         st.dataframe(player_impact_df, width="stretch", hide_index=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -4864,32 +4866,32 @@ analysis_col, access_col = st.columns([1.05, 0.95])
 
 with analysis_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("Chance Quality Profile")
+    st.subheader("チャンス品質プロフィール")
     render_section_benefit("Chance Quality Profile")
     chance_metrics = st.columns(4)
-    chance_metrics[0].metric("Shots", shot_profile["shots"])
+    chance_metrics[0].metric("シュート数", shot_profile["shots"])
     chance_metrics[1].metric("xG", f"{shot_profile['xg']:.2f}")
-    chance_metrics[2].metric("Big Chances", shot_profile["big_chances"])
-    chance_metrics[3].metric("Central Shots", shot_profile["central_shots"])
+    chance_metrics[2].metric("決定機", shot_profile["big_chances"])
+    chance_metrics[3].metric("中央シュート", shot_profile["central_shots"])
     split_metrics = st.columns(3)
-    split_metrics[0].metric("Box Shots", shot_profile["box_shots"])
-    split_metrics[1].metric("Open Play xG", f"{shot_profile['open_play_xg']:.2f}")
-    split_metrics[2].metric("Set Piece xG", f"{shot_profile['set_piece_xg']:.2f}")
+    split_metrics[0].metric("ボックス内シュート", shot_profile["box_shots"])
+    split_metrics[1].metric("オープンプレー xG", f"{shot_profile['open_play_xg']:.2f}")
+    split_metrics[2].metric("セットプレー xG", f"{shot_profile['set_piece_xg']:.2f}")
     st.markdown("</div>", unsafe_allow_html=True)
 
 with access_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("Territory & Access")
+    st.subheader("陣地と侵入")
     render_section_benefit("Territory & Access")
     territory_metrics = st.columns(4)
-    territory_metrics[0].metric("Final-Third Passes", f"{tactical_summary['final_third_passes']:.0f}")
-    territory_metrics[1].metric("Attack Height", f"{tactical_summary['mean_attack_height']:.0f}")
-    territory_metrics[2].metric("Rest Defence", f"{tactical_summary['rest_defence_count']:.0f}")
-    territory_metrics[3].metric("Right Lane Bias", f"{tactical_summary['right_lane_bias']:.0f}%")
+    territory_metrics[0].metric("ファイナルサードへのパス", f"{tactical_summary['final_third_passes']:.0f}")
+    territory_metrics[1].metric("攻撃時の平均高さ", f"{tactical_summary['mean_attack_height']:.0f}")
+    territory_metrics[2].metric("後方保持人数", f"{tactical_summary['rest_defence_count']:.0f}")
+    territory_metrics[3].metric("右レーン偏重", f"{tactical_summary['right_lane_bias']:.0f}%")
     proxy_metrics = st.columns(3)
-    proxy_metrics[0].metric("Field Tilt Proxy", f"{control_profile['field_tilt_proxy']:.0f}%")
-    proxy_metrics[1].metric("Box Entry Proxy", f"{control_profile['box_entry_proxy']:.0f}")
-    proxy_metrics[2].metric("Box Touch Proxy", f"{control_profile['box_touch_proxy']:.1f}")
+    proxy_metrics[0].metric("押し込み度 proxy", f"{control_profile['field_tilt_proxy']:.0f}%")
+    proxy_metrics[1].metric("ボックス侵入 proxy", f"{control_profile['box_entry_proxy']:.0f}")
+    proxy_metrics[2].metric("ボックスタッチ proxy", f"{control_profile['box_touch_proxy']:.1f}")
     st.plotly_chart(create_final_third_access_chart(player_df), width="stretch")
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -4897,9 +4899,9 @@ xg_col, map_col = st.columns([0.95, 1.05])
 
 with xg_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("xG Race")
+    st.subheader("xG推移")
     render_section_benefit("xG Race")
-    st.caption("Shot-by-shot cumulative xG progression for Arsenal and the opponent.")
+    st.caption("Arsenalと相手の累積xGをシュートごとに追い、どの時間帯で流れが傾いたかを見ます。")
     st.plotly_chart(create_xg_race_chart(xg_race_df), width="stretch")
     for note in match_swing_notes:
         st.write(f"- {note}")
@@ -4909,22 +4911,22 @@ defence_col, state_col = st.columns([1.0, 1.0])
 
 with defence_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("Defensive Review")
+    st.subheader("守備レビュー")
     render_section_benefit("Defensive Review")
     defence_metrics = st.columns(3)
-    defence_metrics[0].metric("Opp xG", f"{opp_shot_profile['xg']:.2f}")
-    defence_metrics[1].metric("Opp Central Shots", opp_shot_profile["central_shots"])
-    defence_metrics[2].metric("Opp Box Touch Proxy", f"{control_profile['opponent_box_touch_proxy']:.1f}")
+    defence_metrics[0].metric("相手 xG", f"{opp_shot_profile['xg']:.2f}")
+    defence_metrics[1].metric("相手中央シュート", opp_shot_profile["central_shots"])
+    defence_metrics[2].metric("相手ボックスタッチ proxy", f"{control_profile['opponent_box_touch_proxy']:.1f}")
     for line in defensive_review_lines:
         st.write(f"- {line}")
     st.markdown("</div>", unsafe_allow_html=True)
 
 with state_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("Score State Analysis")
+    st.subheader("スコア状況別分析")
     render_section_benefit("Score State Analysis")
     if score_state_df.empty:
-        st.info("Score-state data is unavailable for this match.")
+        st.info("この試合ではスコア状況別データを利用できません。")
     else:
         st.plotly_chart(create_score_state_chart(score_state_df), width="stretch")
         state_table = score_state_df.copy()
@@ -4936,7 +4938,7 @@ event_left, event_right = st.columns([1.0, 1.0])
 
 with event_left:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("Event Timeline")
+    st.subheader("イベントタイムライン")
     render_section_benefit("Event Timeline")
     st.plotly_chart(
         create_event_timeline_chart(event_df),
@@ -4951,15 +4953,15 @@ with event_left:
 
 with event_right:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    tab_periods, tab_subs = st.tabs(["Period Stats", "Substitution Impact"])
+    tab_periods, tab_subs = st.tabs(["時間帯スタッツ", "交代の影響"])
     with tab_periods:
         if period_stats_df.empty:
-            st.info("Period stats are unavailable for this match.")
+            st.info("この試合では時間帯スタッツを利用できません。")
         else:
             st.dataframe(period_stats_df.astype(str), width="stretch", hide_index=True)
     with tab_subs:
         if substitution_impact_df.empty:
-            st.info("No substitution impact data is available for this match.")
+            st.info("この試合では交代影響データを利用できません。")
         else:
             st.dataframe(substitution_impact_df, width="stretch", hide_index=True)
     st.markdown("</div>", unsafe_allow_html=True)
@@ -4968,9 +4970,9 @@ map_col, side_col = st.columns([1.05, 0.95])
 
 with map_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("Match Shot Map")
+    st.subheader("シュートマップ")
     render_section_benefit("Match Shot Map")
-    st.caption("Real FotMob shot locations for the selected Arsenal match, sized by xG.")
+    st.caption("選択したArsenalの試合におけるFotMobの実シュート位置です。円の大きさはxGを表します。")
     if shot_df.empty:
         st.plotly_chart(create_shot_threat_map(player_df), width="stretch")
     else:
@@ -4978,23 +4980,23 @@ with map_col:
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("Pass Network")
+    st.subheader("パスネットワーク")
     render_section_benefit("Pass Network")
-    st.caption("Built from FotMob's selected-match lineup plus embedded passing metrics and relation weights.")
+    st.caption("FotMobのラインアップ、パス関連指標、関係性の重みから作成しています。")
     st.plotly_chart(create_pass_map(player_df), width="stretch")
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("Player Relationships")
+    st.subheader("選手間の関係性")
     render_section_benefit("Player Relationships")
     rel_left, rel_right = st.columns([1.05, 0.95])
     with rel_left:
         if relationship_hubs_df.empty:
-            st.info("Relationship data is unavailable for this match.")
+            st.info("この試合では関係性データを利用できません。")
         else:
             st.plotly_chart(create_hub_chart(relationship_hubs_df), width="stretch")
     with rel_right:
-        tab_links, tab_hubs = st.tabs(["Top Links", "Hub Players"])
+        tab_links, tab_hubs = st.tabs(["主な接続", "ハブ選手"])
         with tab_links:
             st.dataframe(relationship_links_df, width="stretch", hide_index=True)
         with tab_hubs:
@@ -5003,10 +5005,10 @@ with map_col:
 
 with side_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("Injury Tracker")
+    st.subheader("怪我・離脱状況")
     render_section_benefit("Injury Tracker")
     if injury_df.empty:
-        st.success("No unavailable Arsenal players were returned in the latest team feed.")
+        st.success("最新のチームフィードでは離脱中のArsenal選手は返されていません。")
     else:
         st.dataframe(
             injury_df,
@@ -5021,10 +5023,10 @@ with side_col:
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("Arsenal News")
+    st.subheader("Arsenalニュース")
     render_section_benefit("Arsenal News")
     if news_df.empty:
-        st.info("News is temporarily unavailable.")
+        st.info("ニュースを一時的に取得できません。")
     else:
         for item in news_df.to_dict("records")[:6]:
             link = item.get("link", "")
@@ -5064,7 +5066,7 @@ history_col, snapshot_col = st.columns([1.0, 1.0])
 
 with history_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    tab_history, tab_moments = st.tabs(["Review History", "Key Moments"])
+    tab_history, tab_moments = st.tabs(["レビュー履歴", "重要局面"])
     with tab_history:
         st.dataframe(
             review_history_df,
@@ -5096,29 +5098,29 @@ with history_col:
 
 with snapshot_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("Analyst Snapshot")
+    st.subheader("分析スナップショット")
     render_section_benefit("Analyst Snapshot")
     for line in analyst_snapshot_lines:
         st.write(line)
     st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown('<div class="panel">', unsafe_allow_html=True)
-st.subheader("Cannon-Style Analysis Template")
+st.subheader("Cannon型 分析テンプレート")
 render_section_benefit("Cannon-Style Analysis Template")
 template_tabs = st.tabs([section["section"].split(". ", 1)[1] for section in analysis_template_sections])
 for tab, section in zip(template_tabs, analysis_template_sections):
     with tab:
-        st.write(f"**Question**  {section['question']}")
-        st.write(f"**Visual**  {section['visual']}")
-        st.write(f"**Interpretation**  {section['interpretation']}")
-        st.write(f"**Coaching Action**  {section['action']}")
+        st.write(f"**問い**  {section['question']}")
+        st.write(f"**見るべきビジュアル**  {section['visual']}")
+        st.write(f"**解釈**  {section['interpretation']}")
+        st.write(f"**監督向けアクション**  {section['action']}")
         metric_rows = pd.DataFrame({"Signal": section.get("metrics", [])})
         if not metric_rows.empty:
             st.dataframe(metric_rows, width="stretch", hide_index=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown('<div class="panel">', unsafe_allow_html=True)
-st.subheader("Full Match Report")
+st.subheader("フルマッチレポート")
 render_section_benefit("Full Match Report")
 report_top_left, report_top_right = st.columns([1.15, 0.85])
 with report_top_left:
@@ -5136,13 +5138,13 @@ with report_top_left:
 with report_top_right:
     report_cards = st.columns(2)
     report_cards[0].metric("Arsenal xG", f"{shot_profile['xg']:.2f}")
-    report_cards[1].metric("Opponent xG", f"{opp_shot_profile['xg']:.2f}")
+    report_cards[1].metric("相手 xG", f"{opp_shot_profile['xg']:.2f}")
     report_cards = st.columns(2)
-    report_cards[0].metric("Field Tilt Proxy", f"{control_profile['field_tilt_proxy']:.0f}%")
-    report_cards[1].metric("Key Player", key_player_name)
+    report_cards[0].metric("押し込み度 proxy", f"{control_profile['field_tilt_proxy']:.0f}%")
+    report_cards[1].metric("キープレイヤー", key_player_name)
     report_cards = st.columns(2)
-    report_cards[0].metric("Central Shots", shot_profile["central_shots"])
-    report_cards[1].metric("Opp Central Shots", opp_shot_profile["central_shots"])
+    report_cards[0].metric("中央シュート", shot_profile["central_shots"])
+    report_cards[1].metric("相手中央シュート", opp_shot_profile["central_shots"])
 
 report_summary_left, report_summary_right = st.columns([1.0, 1.0])
 with report_summary_left:
@@ -5153,38 +5155,38 @@ with report_summary_right:
     st.write(f"**キープレイヤー**  {key_player_name}")
 
 st.download_button(
-    "Download Match Report (.md)",
+    "マッチレポートをダウンロード (.md)",
     data=full_match_report,
     file_name=f"arsenal-report-{selected_match['match_id']}.md",
     mime="text/markdown",
     use_container_width=True,
 )
 st.download_button(
-    "Download X Post Pack (.txt)",
+    "X投稿パックをダウンロード (.txt)",
     data=x_post_pack,
     file_name=f"arsenal-x-post-{selected_match['match_id']}.txt",
     mime="text/plain",
     use_container_width=True,
 )
-with st.expander("X Post Preview"):
+with st.expander("X投稿プレビュー"):
     st.text_area(
-        "X post / thread draft",
+        "X投稿 / スレッド案",
         value=x_post_pack,
         height=360,
         key=f"x_post_pack_preview_{selected_match_id}",
     )
-with st.expander("Open Text Report"):
+with st.expander("テキストレポートを開く"):
     st.markdown(full_match_report)
 st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown('<div class="panel">', unsafe_allow_html=True)
-st.subheader("Season Player Performance Lab")
+st.subheader("シーズン選手パフォーマンス分析")
 render_section_benefit("Season Player Performance Lab")
 st.caption("1試合ではなく、シーズン全体で誰が良いパフォーマンスを出しているかを見る補助モジュールです。FotMob公開フィードの season rating、G/A、直近評価、Top-player recognition、availability を合成しています。")
 if season_player_performance_df.empty:
-    st.info("Season player performance data is unavailable.")
+    st.info("シーズン選手評価データを利用できません。")
 else:
-    with st.expander("Open season player performance analysis", expanded=False):
+    with st.expander("シーズン選手分析を開く", expanded=False):
         season_left, season_right = st.columns([1.15, 0.85])
         with season_left:
             st.plotly_chart(
@@ -5194,23 +5196,23 @@ else:
             )
         with season_right:
             season_focus = st.selectbox(
-                "Season player focus",
+                "注目選手",
                 options=season_player_performance_df["Player"].tolist(),
                 key="season_player_focus",
             )
             focus_season = season_player_performance_df[season_player_performance_df["Player"] == season_focus].iloc[0]
             season_metrics = st.columns(2)
-            season_metrics[0].metric("Performance Score", f"{focus_season['Performance Score']:.1f}")
-            season_metrics[1].metric("Profile", focus_season["Profile"])
+            season_metrics[0].metric("パフォーマンススコア", f"{focus_season['Performance Score']:.1f}")
+            season_metrics[1].metric("プロフィール", focus_season["Profile"])
             season_metrics = st.columns(2)
-            season_metrics[0].metric("Season Rating", f"{focus_season['Season Rating']:.2f}")
+            season_metrics[0].metric("シーズン評価", f"{focus_season['Season Rating']:.2f}")
             season_metrics[1].metric("G+A", int(focus_season["Goal Contributions"]))
             st.plotly_chart(
                 create_player_score_breakdown(season_player_performance_df, season_focus),
                 width="stretch",
                 key=f"season_score_breakdown_{season_focus}",
             )
-            st.write(f"**Verdict**  {focus_season['Verdict']}")
+            st.write(f"**評価**  {focus_season['Verdict']}")
         st.dataframe(
             season_player_performance_df,
             width="stretch",
@@ -5230,11 +5232,11 @@ else:
 st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown('<div class="panel">', unsafe_allow_html=True)
-st.subheader("Player Deep Dive")
+st.subheader("選手深掘り")
 render_section_benefit("Player Deep Dive")
 if deep_dive_candidates:
     selected_deep_dive_player = st.selectbox(
-        "Inspect player",
+        "確認する選手",
         options=deep_dive_candidates,
         index=deep_dive_candidates.index(st.session_state[deep_dive_state_key]),
     )
@@ -5250,17 +5252,17 @@ if deep_dive_candidates:
     deep_left, deep_right = st.columns([1.0, 1.0])
     with deep_left:
         deep_metrics = st.columns(3)
-        deep_metrics[0].metric("Rating", player_deep_dive.get("rating") or "N/A")
-        deep_metrics[1].metric("Shots", player_deep_dive.get("shots", 0))
+        deep_metrics[0].metric("評価点", player_deep_dive.get("rating") or "N/A")
+        deep_metrics[1].metric("シュート数", player_deep_dive.get("shots", 0))
         deep_metrics[2].metric("xG", f"{player_deep_dive.get('xg', 0.0):.2f}")
         deep_metrics = st.columns(3)
-        deep_metrics[0].metric("Accurate Passes", player_deep_dive.get("accurate_passes", 0))
-        deep_metrics[1].metric("Final-third Passes", player_deep_dive.get("final_third_passes", 0))
-        deep_metrics[2].metric("Touches", player_deep_dive.get("touches", 0))
+        deep_metrics[0].metric("成功パス", player_deep_dive.get("accurate_passes", 0))
+        deep_metrics[1].metric("ファイナルサードへのパス", player_deep_dive.get("final_third_passes", 0))
+        deep_metrics[2].metric("タッチ数", player_deep_dive.get("touches", 0))
         deep_metrics = st.columns(3)
-        deep_metrics[0].metric("Recoveries", player_deep_dive.get("recoveries", 0))
-        deep_metrics[1].metric("Distance", f"{player_deep_dive.get('distance_covered', 0.0):.1f}")
-        deep_metrics[2].metric("Hub Score", f"{player_deep_dive.get('hub_score', 0.0):.2f}")
+        deep_metrics[0].metric("回収", player_deep_dive.get("recoveries", 0))
+        deep_metrics[1].metric("走行距離", f"{player_deep_dive.get('distance_covered', 0.0):.1f}")
+        deep_metrics[2].metric("ハブスコア", f"{player_deep_dive.get('hub_score', 0.0):.2f}")
         st.plotly_chart(
             create_player_stat_bar(player_deep_dive),
             width="stretch",
@@ -5268,7 +5270,7 @@ if deep_dive_candidates:
         )
     with deep_right:
         player_shot_df = player_deep_dive.get("shot_df", pd.DataFrame())
-        heatmap_tab, shotmap_tab = st.tabs(["Heatmap", "Shot Map"])
+        heatmap_tab, shotmap_tab = st.tabs(["ヒートマップ", "シュートマップ"])
         with heatmap_tab:
             if not player_heatmap_df.empty:
                 st.plotly_chart(
@@ -5277,7 +5279,7 @@ if deep_dive_candidates:
                     key=f"deep_dive_heatmap_{selected_match_id}_{selected_deep_dive_player}",
                 )
             else:
-                st.info("Heatmap data is unavailable for this player in the selected match.")
+                st.info("この選手のヒートマップデータを利用できません。")
         with shotmap_tab:
             if isinstance(player_shot_df, pd.DataFrame) and not player_shot_df.empty:
                 st.plotly_chart(
@@ -5286,7 +5288,7 @@ if deep_dive_candidates:
                     key=f"deep_dive_shot_map_{selected_match_id}_{selected_deep_dive_player}",
                 )
             else:
-                st.info("This player has no recorded shots in the selected match.")
+                st.info("この選手のシュート記録はありません。")
         st.dataframe(
             pd.DataFrame(
                 {
@@ -5314,11 +5316,11 @@ if deep_dive_candidates:
             hide_index=True,
         )
 else:
-    st.info("Player deep-dive data is unavailable for this match.")
+    st.info("この試合では選手深掘りデータを利用できません。")
 st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown('<div class="panel">', unsafe_allow_html=True)
-st.subheader("Arsenal Analyst Chat")
+st.subheader("Arsenal分析チャット")
 render_section_benefit("Arsenal Analyst Chat")
 prompt_cols = st.columns(4)
 suggested_prompts = [
