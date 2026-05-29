@@ -2916,6 +2916,74 @@ def render_match_review(title: str, lines: list[str]) -> None:
         st.write(f"- {line}")
 
 
+def build_player_focus_reasons(
+    selected_player: str,
+    key_player_name: str,
+    key_player_reasons: list[str],
+    player_deep_dive: dict[str, object],
+    player_impact_df: pd.DataFrame,
+) -> list[str]:
+    if selected_player == key_player_name and key_player_reasons:
+        return key_player_reasons
+
+    reasons: list[str] = []
+    if not player_impact_df.empty:
+        impact_row = player_impact_df[player_impact_df["Player"] == selected_player]
+        if not impact_row.empty:
+            why = impact_row.iloc[0].get("Why")
+            if why:
+                reasons.append(str(why))
+
+    final_third = int(player_deep_dive.get("final_third_passes", 0))
+    touches = int(player_deep_dive.get("touches", 0))
+    shots = int(player_deep_dive.get("shots", 0))
+    xg = float(player_deep_dive.get("xg", 0.0))
+    recoveries = int(player_deep_dive.get("recoveries", 0))
+    hub_score = float(player_deep_dive.get("hub_score", 0.0))
+
+    if final_third:
+        reasons.append(f"Final-third passes {final_third} 本で、前進や敵陣侵入に関与しています。")
+    if touches:
+        reasons.append(f"Touches {touches} 回で、この試合の関与量を確認できます。")
+    if shots or xg:
+        reasons.append(f"Shots {shots} 本、xG {xg:.2f} でフィニッシュ局面への関与があります。")
+    if recoveries:
+        reasons.append(f"Recoveries {recoveries} 回で、非保持・トランジション面にも関与しています。")
+    if hub_score:
+        reasons.append(f"Hub Score {hub_score:.2f} で、パスネットワーク内の接続点としての重要度があります。")
+    if not reasons:
+        reasons.append("この選手の詳細スタッツは限定的ですが、下のPlayer Deep Diveで個別確認できます。")
+    return reasons[:4]
+
+
+def render_player_focus_card(
+    selected_player: str,
+    key_player_name: str,
+    key_player_reasons: list[str],
+    player_deep_dive: dict[str, object],
+    player_impact_df: pd.DataFrame,
+) -> None:
+    st.metric("Selected Player", selected_player)
+    if selected_player != key_player_name:
+        st.caption(f"Model key player: {key_player_name}. 現在はクリックした選手の詳細に切り替えています。")
+    metrics = st.columns(3)
+    metrics[0].metric("Rating", player_deep_dive.get("rating") or "N/A")
+    metrics[1].metric("Touches", player_deep_dive.get("touches", 0))
+    metrics[2].metric("xG", f"{float(player_deep_dive.get('xg', 0.0)):.2f}")
+    metrics = st.columns(3)
+    metrics[0].metric("Final-third Passes", player_deep_dive.get("final_third_passes", 0))
+    metrics[1].metric("Recoveries", player_deep_dive.get("recoveries", 0))
+    metrics[2].metric("Hub Score", f"{float(player_deep_dive.get('hub_score', 0.0)):.2f}")
+    for line in build_player_focus_reasons(
+        selected_player,
+        key_player_name,
+        key_player_reasons,
+        player_deep_dive,
+        player_impact_df,
+    ):
+        st.write(f"- {line}")
+
+
 def build_phase_split(shot_df: pd.DataFrame, team_label: str) -> pd.DataFrame:
     if shot_df.empty:
         return pd.DataFrame(columns=["Phase", "Team", "Shots", "xG"])
@@ -3862,10 +3930,15 @@ if layout_mode == "Guided Story":
             for line in opponent_edges or ["相手の脅威は大きくなく、Arsenal が主導権を持てた試合でした。"]:
                 st.write(f"- {line}")
     with driver_right:
-        st.metric("Key Player", key_player_name)
-        for line in key_player_reasons or ["この試合ではチーム全体の実行が結果を左右しました。"]:
-            st.write(f"- {line}")
+        render_player_focus_card(
+            selected_deep_dive_player,
+            key_player_name,
+            key_player_reasons,
+            player_deep_dive,
+            player_impact_df,
+        )
         if deep_dive_candidates:
+            st.caption("Click a player to change this card and the Player Layer deep dive.")
             button_cols = st.columns(min(4, len(deep_dive_candidates)))
             for idx, player_name in enumerate(deep_dive_candidates[:4]):
                 if button_cols[idx].button(player_name, key=f"guided_deep_dive_button_{selected_match_id}_{player_name}", use_container_width=True):
@@ -4249,14 +4322,15 @@ with player_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
     st.subheader("Key Player Verdict")
     render_section_benefit("Key Player Verdict")
-    st.metric("Key Player", key_player_name)
-    if key_player_reasons:
-        for line in key_player_reasons:
-            st.write(f"- {line}")
-    else:
-        st.write("- この試合では単独で断定できるキープレイヤーは薄く、チーム全体の実行が結果を左右しました。")
+    render_player_focus_card(
+        selected_deep_dive_player,
+        key_player_name,
+        key_player_reasons,
+        player_deep_dive,
+        player_impact_df,
+    )
     if deep_dive_candidates:
-        st.caption("Click to deep dive")
+        st.caption("Click to change this card and the Player Deep Dive section.")
         button_cols = st.columns(min(4, len(deep_dive_candidates)))
         for idx, player_name in enumerate(deep_dive_candidates[:4]):
             if button_cols[idx].button(player_name, key=f"deep_dive_button_{selected_match_id}_{player_name}", use_container_width=True):
