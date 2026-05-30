@@ -131,6 +131,29 @@ st.markdown(
         font-size: 0.9rem;
         line-height: 1.46;
     }}
+    .flow-strip {{
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 6px;
+        margin-bottom: 4px;
+    }}
+    .flow-pill {{
+        flex: 1 1 130px;
+        min-width: 120px;
+        border: 1px solid rgba(245, 196, 81, 0.18);
+        border-radius: 999px;
+        padding: 8px 12px;
+        background: rgba(6, 17, 29, 0.52);
+        color: {TEXT_MAIN};
+        font-size: 0.86rem;
+        font-weight: 700;
+        text-align: center;
+    }}
+    .flow-pill span {{
+        color: {ARSENAL_GOLD};
+        margin-right: 5px;
+    }}
     .news-item a {{
         color: {TEXT_MAIN};
         text-decoration: none;
@@ -197,6 +220,32 @@ def render_section_benefit(title: str, fallback: str | None = None) -> None:
     if not text:
         return
     st.markdown(f'<div class="benefit-note">{text}</div>', unsafe_allow_html=True)
+
+
+def render_analysis_flow() -> None:
+    steps = [
+        ("01", "Match Context"),
+        ("02", "Result Drivers"),
+        ("03", "Game Flow"),
+        ("04", "Chances & Territory"),
+        ("05", "Tactical Structure"),
+        ("06", "Player Layer"),
+        ("07", "Coach View & Output"),
+        ("08", "Analyst Chat"),
+    ]
+    pills = "".join([f'<div class="flow-pill"><span>{number}</span>{label}</div>' for number, label in steps])
+    st.markdown(
+        f"""
+        <div class="panel">
+            <div class="hero-kicker">Analysis Flow</div>
+            <div class="small-note">
+                思考順は「前提を固定する → 勝敗要因を見る → 時間軸で検証する → 陣地と構造へ降りる → 選手と次戦へ変換する」です。
+            </div>
+            <div class="flow-strip">{pills}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def inject_auto_refresh(interval_seconds: int) -> None:
@@ -879,7 +928,7 @@ def build_trend_summary(matches_df: pd.DataFrame, limit: int = 5) -> pd.DataFram
 
 
 def build_recent_results_benchmark(matches_df: pd.DataFrame, limit: int = 5) -> tuple[pd.DataFrame, list[str]]:
-    columns = ["Metric", "Recent", "Season Avg", "Target", "Status", "Delta vs Avg"]
+    columns = ["Metric", "Unit", "Recent", "Season Avg", "Target", "Status", "Delta vs Avg"]
     completed = matches_df[matches_df["finished"]].copy().sort_values("date", ascending=False)
     if completed.empty:
         return pd.DataFrame(columns=columns), ["比較できる完了済み試合がありません。"]
@@ -901,25 +950,26 @@ def build_recent_results_benchmark(matches_df: pd.DataFrame, limit: int = 5) -> 
     season_unbeaten = float((all_completed["result"] != "Loss").mean() * 100)
 
     metric_specs = [
-        ("Goals For / match", recent_gf, season_gf, 2.0, "higher"),
-        ("Goals Against / match", recent_ga, season_ga, 1.0, "lower"),
-        ("Goal Difference / match", recent_gd, season_gd, 1.0, "higher"),
-        ("Win Rate", recent_win_rate, season_win_rate, 70.0, "higher"),
-        ("Clean Sheet Rate", recent_clean_sheet, season_clean_sheet, 40.0, "higher"),
-        ("Unbeaten Rate", recent_unbeaten, season_unbeaten, 80.0, "higher"),
+        ("平均得点", "ゴール/試合", recent_gf, season_gf, 2.0, "higher"),
+        ("平均失点", "ゴール/試合", recent_ga, season_ga, 1.0, "lower"),
+        ("平均得失点差", "ゴール/試合", recent_gd, season_gd, 1.0, "higher"),
+        ("勝率", "割合%", recent_win_rate, season_win_rate, 70.0, "higher"),
+        ("クリーンシート率", "割合%", recent_clean_sheet, season_clean_sheet, 40.0, "higher"),
+        ("無敗率", "割合%", recent_unbeaten, season_unbeaten, 80.0, "higher"),
     ]
 
     rows = []
-    for metric, recent_value, season_value, target, direction in metric_specs:
+    for metric, unit, recent_value, season_value, target, direction in metric_specs:
         if direction == "higher":
-            status = "Good" if recent_value >= target else ("Watch" if recent_value >= season_value else "Concern")
+            status = "良好" if recent_value >= target else ("要観察" if recent_value >= season_value else "懸念")
             delta = recent_value - season_value
         else:
-            status = "Good" if recent_value <= target else ("Watch" if recent_value <= season_value else "Concern")
+            status = "良好" if recent_value <= target else ("要観察" if recent_value <= season_value else "懸念")
             delta = season_value - recent_value
         rows.append(
             {
                 "Metric": metric,
+                "Unit": unit,
                 "Recent": round(recent_value, 2),
                 "Season Avg": round(season_value, 2),
                 "Target": round(target, 2),
@@ -928,10 +978,10 @@ def build_recent_results_benchmark(matches_df: pd.DataFrame, limit: int = 5) -> 
             }
         )
     benchmark_df = pd.DataFrame(rows, columns=columns)
-    good_count = int((benchmark_df["Status"] == "Good").sum())
-    concern_count = int((benchmark_df["Status"] == "Concern").sum())
+    good_count = int((benchmark_df["Status"] == "良好").sum())
+    concern_count = int((benchmark_df["Status"] == "懸念").sum())
     notes = [
-        f"直近{len(recent)}試合で Good が {good_count} 項目、Concern が {concern_count} 項目です。",
+        f"直近{len(recent)}試合で良好が {good_count} 項目、懸念が {concern_count} 項目です。",
     ]
     if recent_gd > season_gd:
         notes.append(f"得失点差は直近 {recent_gd:+.2f}/match で、選択範囲平均 {season_gd:+.2f} より良化しています。")
@@ -944,42 +994,47 @@ def build_recent_results_benchmark(matches_df: pd.DataFrame, limit: int = 5) -> 
     return benchmark_df, notes
 
 
-def create_recent_results_benchmark_chart(benchmark_df: pd.DataFrame) -> go.Figure:
+def create_recent_results_benchmark_chart(benchmark_df: pd.DataFrame, unit: str | None = None) -> go.Figure:
     fig = go.Figure()
     if benchmark_df.empty:
-        return base_chart_layout(fig, height=320)
+        return base_chart_layout(fig, height=280)
     plot_df = benchmark_df.copy()
-    status_colors = {"Good": "#22C55E", "Watch": ARSENAL_GOLD, "Concern": ARSENAL_RED}
+    if unit and "Unit" in plot_df.columns:
+        plot_df = plot_df[plot_df["Unit"] == unit].copy()
+    if plot_df.empty:
+        return base_chart_layout(fig, height=280)
+    status_colors = {"良好": "#22C55E", "要観察": ARSENAL_GOLD, "懸念": ARSENAL_RED}
     fig.add_trace(
         go.Bar(
             y=plot_df["Metric"],
             x=plot_df["Season Avg"],
-            name="Selected range avg",
+            name="選択範囲平均",
             orientation="h",
             marker=dict(color="rgba(147,197,253,0.42)"),
-            hovertemplate="<b>%{y}</b><br>Selected range avg: %{x:.2f}<extra></extra>",
+            hovertemplate="<b>%{y}</b><br>選択範囲平均: %{x:.2f}<extra></extra>",
         )
     )
     fig.add_trace(
         go.Bar(
             y=plot_df["Metric"],
             x=plot_df["Recent"],
-            name="Recent form",
+            name="直近フォーム",
             orientation="h",
             marker=dict(color=plot_df["Status"].map(status_colors)),
             customdata=plot_df[["Target", "Status", "Delta vs Avg"]],
             hovertemplate=(
                 "<b>%{y}</b><br>"
-                "Recent: %{x:.2f}<br>"
-                "Target: %{customdata[0]:.2f}<br>"
-                "Status: %{customdata[1]}<br>"
-                "Delta vs avg: %{customdata[2]:+.2f}<extra></extra>"
+                "直近: %{x:.2f}<br>"
+                "目標ライン: %{customdata[0]:.2f}<br>"
+                "判定: %{customdata[1]}<br>"
+                "平均との差: %{customdata[2]:+.2f}<extra></extra>"
             ),
         )
     )
-    fig = base_chart_layout(fig, height=360)
+    fig = base_chart_layout(fig, height=300)
     fig.update_layout(barmode="group", legend=dict(orientation="h", y=1.08, x=0))
-    fig.update_xaxes(title="Value", gridcolor="rgba(159,176,196,0.14)")
+    axis_title = "割合（%）" if unit == "割合%" else "ゴール / 試合"
+    fig.update_xaxes(title=axis_title, gridcolor="rgba(159,176,196,0.14)")
     fig.update_yaxes(title=None, autorange="reversed")
     return fig
 
@@ -1061,23 +1116,23 @@ def build_season_player_performance_df(payload: dict, top_players_df: pd.DataFra
 
     def profile(row: pd.Series) -> str:
         if row["goals_num"] >= row["assists_num"] + 3:
-            return "Finisher"
+            return "フィニッシャー"
         if row["assists_num"] >= row["goals_num"] + 2:
-            return "Creator"
+            return "クリエイター"
         if row["rating_num"] >= 7.0 and row["goal_contributions"] <= 3:
-            return "Control Piece"
+            return "支配の要"
         if row["recognition"] >= 30:
-            return "High-visibility performer"
-        return "Balanced contributor"
+            return "注目度の高い貢献者"
+        return "バランス型貢献者"
 
     def verdict(row: pd.Series) -> str:
         if row["score"] >= 78:
-            return "Excellent season signal"
+            return "非常に良いシーズン傾向"
         if row["score"] >= 62:
-            return "Positive contributor"
+            return "ポジティブな貢献者"
         if row["score"] >= 45:
-            return "Useful but needs context"
-        return "Limited signal so far"
+            return "有用だが文脈確認が必要"
+        return "現時点では材料が限定的"
 
     rows = pd.DataFrame(
         {
@@ -1118,8 +1173,8 @@ def create_season_performance_chart(season_df: pd.DataFrame) -> go.Figure:
         color_discrete_sequence=[ARSENAL_RED, ARSENAL_GOLD, "#7DD3FC", "#8DD3C7", "#CBD5E1"],
     )
     fig = base_chart_layout(fig, height=360)
-    fig.update_xaxes(title="Season rating", gridcolor="rgba(159,176,196,0.14)")
-    fig.update_yaxes(title="Goals + assists", gridcolor="rgba(159,176,196,0.14)")
+    fig.update_xaxes(title="シーズン評価", gridcolor="rgba(159,176,196,0.14)")
+    fig.update_yaxes(title="ゴール + アシスト", gridcolor="rgba(159,176,196,0.14)")
     return fig
 
 
@@ -1127,7 +1182,7 @@ def create_player_score_breakdown(season_df: pd.DataFrame, selected_player: str)
     row_df = season_df[season_df["Player"] == selected_player]
     metrics = pd.DataFrame(
         {
-            "Metric": ["Season Rating", "Goal Contributions", "Last Match Rating", "Recognition", "Availability"],
+            "Metric": ["シーズン評価", "G+A", "直近試合評価", "注目度", "稼働可能性"],
             "Score": [0, 0, 0, 0, 0],
         }
     )
@@ -1151,7 +1206,7 @@ def create_player_score_breakdown(season_df: pd.DataFrame, selected_player: str)
     )
     fig = base_chart_layout(fig, height=300)
     fig.update_xaxes(title=None)
-    fig.update_yaxes(title="Score / 100", range=[0, 100], gridcolor="rgba(159,176,196,0.14)")
+    fig.update_yaxes(title="スコア / 100", range=[0, 100], gridcolor="rgba(159,176,196,0.14)")
     fig.update_layout(coloraxis_showscale=False)
     return fig
 
@@ -1351,6 +1406,158 @@ def build_shot_profile(shot_df: pd.DataFrame) -> dict[str, float]:
     }
 
 
+def build_recent_xg_actual_df(matches_df: pd.DataFrame, limit: int = 5) -> pd.DataFrame:
+    columns = [
+        "Date",
+        "Match",
+        "Opponent",
+        "Result",
+        "Goals",
+        "xG",
+        "G - xG",
+        "Goals Against",
+        "xGA",
+        "GA - xGA",
+    ]
+    completed = matches_df[matches_df["finished"]].copy().sort_values("date", ascending=False).head(limit)
+    if completed.empty:
+        return pd.DataFrame(columns=columns)
+
+    rows = []
+    for _, match in completed.iterrows():
+        page_url = match.get("page_url", "")
+        if not page_url:
+            continue
+        page_props = fetch_match_page_props(page_url)
+        all_shots = build_match_shot_df(page_props, None)
+        arsenal_shots = all_shots[all_shots["team_id"] == TEAM_ID].copy() if not all_shots.empty else pd.DataFrame()
+        opponent_shots = all_shots[all_shots["team_id"] != TEAM_ID].copy() if not all_shots.empty else pd.DataFrame()
+        arsenal_profile = build_shot_profile(arsenal_shots)
+        opponent_profile = build_shot_profile(opponent_shots)
+        goals = numeric_or_default(match.get("arsenal_goals"))
+        goals_against = numeric_or_default(match.get("opponent_goals"))
+        date_label = match["date"].strftime("%d %b") if pd.notna(match.get("date")) else "TBD"
+        rows.append(
+            {
+                "Date": date_label,
+                "Match": f"{date_label} vs {match.get('opponent', 'Opponent')}",
+                "Opponent": match.get("opponent", "Opponent"),
+                "Result": match.get("result", ""),
+                "Goals": int(goals),
+                "xG": round(arsenal_profile["xg"], 2),
+                "G - xG": round(goals - arsenal_profile["xg"], 2),
+                "Goals Against": int(goals_against),
+                "xGA": round(opponent_profile["xg"], 2),
+                "GA - xGA": round(goals_against - opponent_profile["xg"], 2),
+            }
+        )
+    return pd.DataFrame(rows, columns=columns).iloc[::-1].reset_index(drop=True) if rows else pd.DataFrame(columns=columns)
+
+
+def create_recent_xg_actual_chart(recent_xg_df: pd.DataFrame, mode: str) -> go.Figure:
+    fig = go.Figure()
+    if recent_xg_df.empty:
+        return base_chart_layout(fig, height=300)
+
+    if mode == "attack":
+        plot_df = recent_xg_df.copy()
+        plot_df["Delta"] = plot_df["G - xG"]
+        plot_df["Label"] = plot_df["Delta"].apply(lambda value: "決め切った" if value >= 0 else "決め切れず")
+        title = "Finishing over / under xG"
+        axis_title = "得点 - xG"
+        positive_note = "プラス: 期待値以上に決めた"
+        negative_note = "マイナス: 期待値ほど決め切れていない"
+        custom_cols = ["Goals", "xG", "G - xG", "Label"]
+        hovertemplate = (
+            "<b>%{y}</b><br>"
+            "実得点: %{customdata[0]:.0f}<br>"
+            "xG: %{customdata[1]:.2f}<br>"
+            "得点 - xG: %{customdata[2]:+.2f}<br>"
+            "読み方: %{customdata[3]}<extra></extra>"
+        )
+    else:
+        plot_df = recent_xg_df.copy()
+        plot_df["Delta"] = plot_df["xGA"] - plot_df["Goals Against"]
+        plot_df["Label"] = plot_df["Delta"].apply(lambda value: "失点を防いだ" if value >= 0 else "期待値以上に失点")
+        title = "Defending over / under xGA"
+        axis_title = "xGA - 失点"
+        positive_note = "プラス: 期待失点より少なく抑えた"
+        negative_note = "マイナス: 期待失点より多く失った"
+        custom_cols = ["Goals Against", "xGA", "Delta", "Label"]
+        hovertemplate = (
+            "<b>%{y}</b><br>"
+            "実失点: %{customdata[0]:.0f}<br>"
+            "xGA: %{customdata[1]:.2f}<br>"
+            "xGA - 失点: %{customdata[2]:+.2f}<br>"
+            "読み方: %{customdata[3]}<extra></extra>"
+        )
+
+    fig.add_trace(
+        go.Bar(
+            x=plot_df["Delta"],
+            y=plot_df["Match"],
+            orientation="h",
+            name=axis_title,
+            marker=dict(
+                color=plot_df["Delta"].apply(lambda value: "#22C55E" if value >= 0 else ARSENAL_RED),
+                line=dict(color="rgba(255,255,255,0.28)", width=1),
+            ),
+            text=plot_df["Delta"].map(lambda value: f"{value:+.2f}"),
+            textposition="outside",
+            customdata=plot_df[custom_cols],
+            hovertemplate=hovertemplate,
+        )
+    )
+    fig = base_chart_layout(fig, height=320)
+    fig.add_vline(x=0, line_width=1.5, line_color="rgba(255,255,255,0.45)")
+    fig.update_layout(
+        showlegend=False,
+        title=dict(text=title, font=dict(size=15)),
+        annotations=[
+            dict(
+                text=f"{negative_note}  |  {positive_note}",
+                x=0.5,
+                y=1.12,
+                xref="paper",
+                yref="paper",
+                showarrow=False,
+                font=dict(size=11, color=TEXT_MUTED),
+            )
+        ],
+    )
+    fig.update_xaxes(title=axis_title, gridcolor="rgba(159,176,196,0.14)", zeroline=True)
+    fig.update_yaxes(title=None, autorange="reversed")
+    return fig
+
+
+def build_recent_xg_notes(recent_xg_df: pd.DataFrame) -> list[str]:
+    if recent_xg_df.empty:
+        return ["直近試合のxG比較データを取得できません。"]
+    total_goals = float(recent_xg_df["Goals"].sum())
+    total_xg = float(recent_xg_df["xG"].sum())
+    total_ga = float(recent_xg_df["Goals Against"].sum())
+    total_xga = float(recent_xg_df["xGA"].sum())
+    finishing_delta = total_goals - total_xg
+    defensive_delta = total_ga - total_xga
+    notes = [
+        f"攻撃: 実得点 {total_goals:.0f} / xG {total_xg:.2f}。差分は {finishing_delta:+.2f} です。",
+        f"守備: 実失点 {total_ga:.0f} / xGA {total_xga:.2f}。差分は {defensive_delta:+.2f} です。",
+    ]
+    if finishing_delta >= 1.0:
+        notes.append("実得点がxGを上回っており、決定力またはシュート精度が結果を押し上げています。")
+    elif finishing_delta <= -1.0:
+        notes.append("実得点がxGを下回っており、チャンス量に対して仕留め切れていません。")
+    else:
+        notes.append("実得点とxGは近く、攻撃の結果はチャンス品質とおおむね一致しています。")
+    if defensive_delta <= -1.0:
+        notes.append("実失点がxGAを下回っており、GK・ブロック・相手の決定力不足に助けられた可能性があります。")
+    elif defensive_delta >= 1.0:
+        notes.append("実失点がxGAを上回っており、少ない危険から失点している可能性があります。")
+    else:
+        notes.append("実失点とxGAは近く、守備結果は許したチャンス品質とおおむね一致しています。")
+    return notes
+
+
 def build_tactical_summary(player_df: pd.DataFrame, shot_df: pd.DataFrame) -> dict[str, float]:
     starters = player_df[player_df["role"] == "Starter"].copy()
     if starters.empty:
@@ -1413,11 +1620,11 @@ def build_match_review(
         lines.append("中央のボックス前で十分に厚みを作れず、フィニッシュ地点が分散しました。")
 
     if tactical_summary["final_third_passes"] >= 30:
-        lines.append(f"Final-third passes は {tactical_summary['final_third_passes']:.0f} 本で、前進量はしっかり確保できています。")
+        lines.append(f"ファイナルサードへのパスは {tactical_summary['final_third_passes']:.0f} 本で、前進量はしっかり確保できています。")
     elif tactical_summary["final_third_passes"] >= 18:
-        lines.append(f"Final-third passes は {tactical_summary['final_third_passes']:.0f} 本。前進はできた一方、最後の崩しがもう一段必要でした。")
+        lines.append(f"ファイナルサードへのパスは {tactical_summary['final_third_passes']:.0f} 本。前進はできた一方、最後の崩しがもう一段必要でした。")
     else:
-        lines.append(f"Final-third passes が {tactical_summary['final_third_passes']:.0f} 本と少なく、相手陣での定着不足が目立ちました。")
+        lines.append(f"ファイナルサードへのパスが {tactical_summary['final_third_passes']:.0f} 本と少なく、相手陣での定着不足が目立ちました。")
 
     if not race_df.empty:
         arsenal_final = race_df[race_df["team"] == "Arsenal"]["cum_xg"].max() if not race_df[race_df["team"] == "Arsenal"].empty else 0
@@ -1425,21 +1632,21 @@ def build_match_review(
         arsenal_60 = race_df[(race_df["team"] == "Arsenal") & (race_df["minute"] <= 60)]["cum_xg"].max() if not race_df[(race_df["team"] == "Arsenal") & (race_df["minute"] <= 60)].empty else 0
         opp_60 = race_df[(race_df["team"] == "Opponent") & (race_df["minute"] <= 60)]["cum_xg"].max() if not race_df[(race_df["team"] == "Opponent") & (race_df["minute"] <= 60)].empty else 0
         if arsenal_60 - opp_60 >= 0.4:
-            lines.append("xG race では 60 分まで Arsenal が先に主導権を握っており、試合の流れを先行して作れていました。")
+            lines.append("xG推移では 60 分まで Arsenal が先に主導権を握っており、試合の流れを先行して作れていました。")
         elif opp_60 - arsenal_60 >= 0.4:
             lines.append("前半から 60 分付近まで相手の xG ペースが上回り、Arsenal は試合の流れを奪い返す展開になりました。")
         elif arsenal_final > opp_final:
-            lines.append("xG race は終盤にかけて Arsenal 側へ傾いており、試合後半の押し込みが結果に繋がった形です。")
+            lines.append("xG推移は終盤にかけて Arsenal 側へ傾いており、試合後半の押し込みが結果に繋がった形です。")
 
     if shot_profile["set_piece_xg"] > 0.35:
-        lines.append(f"Set-piece xG が {shot_profile['set_piece_xg']:.2f} と高く、流れの中だけでなく再開局面も鍵になっています。")
+        lines.append(f"セットプレーxG が {shot_profile['set_piece_xg']:.2f} と高く、流れの中だけでなく再開局面も鍵になっています。")
     if opp_shot_profile["set_piece_xg"] > 0.3:
         lines.append(f"一方で相手にも set-piece xG を {opp_shot_profile['set_piece_xg']:.2f} 許しており、守備面の弱点はそこにありました。")
 
     if player_of_match:
         full_name = player_of_match.get("name", {}).get("fullName", "Key player")
         rating = player_of_match.get("rating", {}).get("num", "")
-        lines.append(f"キーマンは {full_name}。FotMob の Player of the Match で、レーティングは {rating} でした。")
+        lines.append(f"キーマンは {full_name}。FotMob の試合最優秀選手で、レーティングは {rating} でした。")
 
     team_insight = next((item.get("text") for item in insights if item.get("teamId") == TEAM_ID and item.get("text")), None)
     if team_insight:
@@ -1812,7 +2019,7 @@ def build_player_deep_dive(
 def create_player_stat_bar(deep_dive: dict[str, object]) -> go.Figure:
     stat_df = pd.DataFrame(
         {
-            "Metric": ["Accurate Passes", "Final-third Passes", "Touches", "Recoveries", "Shots", "Hub Score"],
+            "Metric": ["成功パス", "ファイナルサードへのパス", "タッチ数", "回収", "シュート", "ハブスコア"],
             "Value": [
                 deep_dive.get("accurate_passes", 0),
                 deep_dive.get("final_third_passes", 0),
@@ -3164,7 +3371,7 @@ def create_final_third_access_chart(player_df: pd.DataFrame) -> go.Figure:
     )
     fig = base_chart_layout(fig, height=300)
     fig.update_xaxes(title=None)
-    fig.update_yaxes(title="Final-third passes", gridcolor="rgba(159,176,196,0.14)")
+    fig.update_yaxes(title="ファイナルサードへのパス", gridcolor="rgba(159,176,196,0.14)")
     return fig
 
 
@@ -3212,9 +3419,9 @@ def create_pass_map(player_df: pd.DataFrame) -> go.Figure:
                 line=dict(color="rgba(245,196,81,0.42)", width=weight),
                 hovertemplate=(
                     f"<b>{left['player']} ↔ {right['player']}</b><br>"
-                    f"Estimated relation weight: {weight:.1f}<br>"
-                    f"Accurate passes: {numeric_or_default(left.get('accurate_passes')) + numeric_or_default(right.get('accurate_passes')):.0f}<br>"
-                    f"Final-third passes: {numeric_or_default(left.get('passes_into_final_third')) + numeric_or_default(right.get('passes_into_final_third')):.0f}"
+                    f"関係性の強さ: {weight:.1f}<br>"
+                    f"成功パス: {numeric_or_default(left.get('accurate_passes')) + numeric_or_default(right.get('accurate_passes')):.0f}<br>"
+                    f"ファイナルサードへのパス: {numeric_or_default(left.get('passes_into_final_third')) + numeric_or_default(right.get('passes_into_final_third')):.0f}"
                     "<extra></extra>"
                 ),
                 showlegend=False,
@@ -3233,14 +3440,14 @@ def create_pass_map(player_df: pd.DataFrame) -> go.Figure:
                     color=starters["passes_into_final_third_num"],
                     colorscale=[[0, "#FFE8A3"], [1, ARSENAL_RED]],
                     line=dict(color="white", width=1.2),
-                    colorbar=dict(title="Final-third passes", bgcolor=PANEL_BG),
+                    colorbar=dict(title="ファイナルサードへのパス", bgcolor=PANEL_BG),
                 ),
                 customdata=starters[["accurate_passes_num", "passes_into_final_third_num", "touches_num"]],
                 hovertemplate=(
                     "<b>%{text}</b><br>"
-                    "Accurate passes: %{customdata[0]}<br>"
-                    "Passes into final third: %{customdata[1]}<br>"
-                    "Touches: %{customdata[2]}<extra></extra>"
+                    "成功パス: %{customdata[0]}<br>"
+                    "ファイナルサードへのパス: %{customdata[1]}<br>"
+                    "タッチ数: %{customdata[2]}<extra></extra>"
                 ),
                 showlegend=False,
             )
@@ -3252,15 +3459,15 @@ def create_pass_map(player_df: pd.DataFrame) -> go.Figure:
 
 def build_zone_threat_df(player_df: pd.DataFrame, shot_df: pd.DataFrame) -> pd.DataFrame:
     zones = [
-        ("Left build", 0, 80, 53.3, 80),
-        ("Central build", 0, 80, 26.7, 53.3),
-        ("Right build", 0, 80, 0, 26.7),
-        ("Left half-space", 80, 105, 53.3, 80),
+        ("左ビルド", 0, 80, 53.3, 80),
+        ("中央ビルド", 0, 80, 26.7, 53.3),
+        ("右ビルド", 0, 80, 0, 26.7),
+        ("左ハーフスペース", 80, 105, 53.3, 80),
         ("Zone 14", 80, 105, 26.7, 53.3),
-        ("Right half-space", 80, 105, 0, 26.7),
-        ("Left box", 105, 120, 53.3, 80),
-        ("Central box", 105, 120, 26.7, 53.3),
-        ("Right box", 105, 120, 0, 26.7),
+        ("右ハーフスペース", 80, 105, 0, 26.7),
+        ("左ボックス", 105, 120, 53.3, 80),
+        ("中央ボックス", 105, 120, 26.7, 53.3),
+        ("右ボックス", 105, 120, 0, 26.7),
     ]
     rows = []
     shots = shot_df.copy()
@@ -3281,18 +3488,18 @@ def build_zone_threat_df(player_df: pd.DataFrame, shot_df: pd.DataFrame) -> pd.D
         shot_threat = float(zone_shots["xg_num"].sum()) if not zone_shots.empty else 0.0
         progression_threat = float(zone_players["pass3_num"].sum() * 0.018 + zone_players["touches_num"].sum() * 0.004) if not zone_players.empty else 0.0
         total = shot_threat + progression_threat
-        contributor_text = "No clear contributor"
-        builder_text = "No builder"
-        shooter_text = "No shooter"
+        contributor_text = "明確な関与者なし"
+        builder_text = "関与者なし"
+        shooter_text = "シューターなし"
         if not zone_players.empty:
             zone_players = zone_players.copy()
             zone_players["contribution_score"] = zone_players["pass3_num"] * 1.8 + zone_players["touches_num"] * 0.35
             top_builders = zone_players.sort_values("contribution_score", ascending=False).head(3)
             contributor_text = ", ".join(
-                f"{row['player']} ({row['pass3_num']:.0f} FT passes, {row['touches_num']:.0f} touches)"
+                f"{row['player']} ({row['pass3_num']:.0f} 本の前進パス, {row['touches_num']:.0f} タッチ)"
                 for _, row in top_builders.iterrows()
             )
-            builder_text = str(top_builders.iloc[0]["player"]) if not top_builders.empty else "No builder"
+            builder_text = str(top_builders.iloc[0]["player"]) if not top_builders.empty else "関与者なし"
         if not zone_shots.empty:
             shooter_series = zone_shots.groupby("player", dropna=False)["xg_num"].sum().sort_values(ascending=False)
             shooter_text = f"{shooter_series.index[0]} ({float(shooter_series.iloc[0]):.2f} xG)"
@@ -3359,11 +3566,11 @@ def create_zone_threat_map(zone_threat_df: pd.DataFrame) -> go.Figure:
             customdata=zone_threat_df[["Threat", "Shot xG", "Progression proxy", "Top Contributors", "Main Shooter"]],
             hovertemplate=(
                 "<b>%{text}</b><br>"
-                "Threat: %{customdata[0]:.2f}<br>"
-                "Shot xG: %{customdata[1]:.2f}<br>"
-                "Progression proxy: %{customdata[2]:.2f}<br>"
-                "Builders: %{customdata[3]}<br>"
-                "Shooter: %{customdata[4]}<extra></extra>"
+                "脅威度: %{customdata[0]:.2f}<br>"
+                "シュートxG: %{customdata[1]:.2f}<br>"
+                "前進proxy: %{customdata[2]:.2f}<br>"
+                "関与者: %{customdata[3]}<br>"
+                "シューター: %{customdata[4]}<extra></extra>"
             ),
             text=zone_threat_df["Zone"],
             showlegend=False,
@@ -3470,12 +3677,33 @@ def build_pressing_profile(
     counterpress_score = min(100, total_recoveries * 4 + max(0, 1.2 - opp_shot_profile["xg"]) * 20)
     discipline_score = max(0, 100 - cards_against * 18)
     rows = [
-        {"Metric": "High Recoveries", "Score": round(high_recovery_score, 1), "Signal": f"{high_unit_recoveries:.0f} recoveries from advanced units"},
-        {"Metric": "Central Lock", "Score": round(central_lock_score, 1), "Signal": f"Opp Zone 14 {opponent_zone_profile['zone14_entries']} / central shots {opp_shot_profile['central_shots']}"},
-        {"Metric": "Counterpress Safety", "Score": round(counterpress_score, 1), "Signal": f"Total recoveries {total_recoveries:.0f}, opp xG {opp_shot_profile['xg']:.2f}"},
-        {"Metric": "Discipline", "Score": round(discipline_score, 1), "Signal": f"{cards_against} Arsenal cards"},
+        {
+            "Metric": "High Recoveries",
+            "What it means": "前線・中盤で奪い返せたか",
+            "Score": round(high_recovery_score, 1),
+            "Signal": f"高い位置の回収 {high_unit_recoveries:.0f} 回",
+        },
+        {
+            "Metric": "Central Lock",
+            "What it means": "中央前進を消せたか",
+            "Score": round(central_lock_score, 1),
+            "Signal": f"相手Zone14 {opponent_zone_profile['zone14_entries']} / 中央シュート {opp_shot_profile['central_shots']}",
+        },
+        {
+            "Metric": "Counterpress Safety",
+            "What it means": "奪回後・失った後の安全性",
+            "Score": round(counterpress_score, 1),
+            "Signal": f"総回収 {total_recoveries:.0f} / 相手xG {opp_shot_profile['xg']:.2f}",
+        },
+        {
+            "Metric": "Discipline",
+            "What it means": "強度を保ちながらカードを避けたか",
+            "Score": round(discipline_score, 1),
+            "Signal": f"Arsenalカード {cards_against} 枚",
+        },
     ]
     profile_df = pd.DataFrame(rows)
+    profile_df["判定"] = profile_df["Score"].apply(lambda score: "Good" if score >= 70 else ("Watch" if score >= 50 else "Concern"))
     lines = []
     average = float(profile_df["Score"].mean())
     if average >= 70:
@@ -3492,19 +3720,63 @@ def build_pressing_profile(
 
 
 def create_pressing_profile_chart(pressing_df: pd.DataFrame) -> go.Figure:
-    fig = px.bar(
-        pressing_df,
-        x="Metric",
-        y="Score",
-        color="Score",
-        color_continuous_scale=[[0, "#93C5FD"], [0.55, "#FFE8A3"], [1, ARSENAL_RED]],
-        text_auto=".0f",
+    fig = go.Figure()
+    if pressing_df.empty:
+        return base_chart_layout(fig, height=310)
+    plot_df = pressing_df.copy().sort_values("Score", ascending=True)
+    colors = plot_df["Score"].apply(lambda score: "#22C55E" if score >= 70 else (ARSENAL_GOLD if score >= 50 else ARSENAL_RED))
+    fig.add_trace(
+        go.Bar(
+            x=plot_df["Score"],
+            y=plot_df["Metric"],
+            orientation="h",
+            marker=dict(color=colors, line=dict(color="rgba(255,255,255,0.28)", width=1)),
+            text=plot_df["Score"].map(lambda value: f"{value:.0f}"),
+            textposition="outside",
+            customdata=plot_df[["What it means", "Signal", "判定"]],
+            hovertemplate=(
+                "<b>%{y}</b><br>"
+                "Score: %{x:.0f}/100<br>"
+                "意味: %{customdata[0]}<br>"
+                "根拠: %{customdata[1]}<br>"
+                "判定: %{customdata[2]}<extra></extra>"
+            ),
+        )
     )
-    fig = base_chart_layout(fig, height=310)
-    fig.update_xaxes(title=None)
-    fig.update_yaxes(title="Pressing score", range=[0, 100], gridcolor="rgba(159,176,196,0.14)")
-    fig.update_layout(coloraxis_showscale=False)
+    fig = base_chart_layout(fig, height=330)
+    fig.add_vline(x=50, line_width=1, line_dash="dot", line_color="rgba(245,196,81,0.65)")
+    fig.add_vline(x=70, line_width=1, line_dash="dot", line_color="rgba(34,197,94,0.65)")
+    fig.update_layout(
+        showlegend=False,
+        annotations=[
+            dict(text="50 Watch", x=50, y=1.08, xref="x", yref="paper", showarrow=False, font=dict(size=10, color=ARSENAL_GOLD)),
+            dict(text="70 Good", x=70, y=1.08, xref="x", yref="paper", showarrow=False, font=dict(size=10, color="#22C55E")),
+        ],
+    )
+    fig.update_xaxes(title="Pressing score / 100", range=[0, 105], gridcolor="rgba(159,176,196,0.14)")
+    fig.update_yaxes(title=None)
     return fig
+
+
+def render_pressing_reading_cards(pressing_df: pd.DataFrame) -> None:
+    if pressing_df.empty:
+        st.info("プレッシング評価に使えるデータがありません。")
+        return
+    cards = st.columns(min(4, len(pressing_df)))
+    for idx, row in pressing_df.iterrows():
+        score = float(row["Score"])
+        verdict = row["判定"]
+        border = "#22C55E" if score >= 70 else (ARSENAL_GOLD if score >= 50 else ARSENAL_RED)
+        cards[idx % len(cards)].markdown(
+            f"""
+            <div class="insight-card" style="border-color:{border};">
+                <div class="insight-card-label">{row['Metric']} · {verdict}</div>
+                <div class="insight-card-value">{score:.0f}/100</div>
+                <div class="small-note">{row['What it means']}<br>{row['Signal']}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 def build_build_up_structure(player_df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
@@ -3517,23 +3789,23 @@ def build_build_up_structure(player_df: pd.DataFrame) -> tuple[pd.DataFrame, lis
 
     def line_label(x_value: float) -> str:
         if x_value < 40:
-            return "Rest defence"
+            return "レストディフェンス"
         if x_value < 68:
-            return "Build-up base"
+            return "ビルドアップ基盤"
         if x_value < 92:
-            return "Between lines"
-        return "Front line"
+            return "ライン間"
+        return "前線"
 
     def lane_label(y_value: float) -> str:
         if y_value < 18:
-            return "Right wide"
+            return "右ワイド"
         if y_value < 32:
-            return "Right half-space"
+            return "右ハーフスペース"
         if y_value < 48:
-            return "Central"
+            return "中央"
         if y_value < 62:
-            return "Left half-space"
-        return "Left wide"
+            return "左ハーフスペース"
+        return "左ワイド"
 
     starters["Line"] = starters["pitch_x"].apply(line_label)
     starters["Lane"] = starters["pitch_y"].apply(lane_label)
@@ -3551,16 +3823,16 @@ def build_build_up_structure(player_df: pd.DataFrame) -> tuple[pd.DataFrame, lis
     line_counts = structure_df["Line"].value_counts()
     lane_counts = structure_df["Lane"].value_counts()
     lines = []
-    rest_count = int(line_counts.get("Rest defence", 0))
-    between_count = int(line_counts.get("Between lines", 0))
-    front_count = int(line_counts.get("Front line", 0))
-    shape = f"{rest_count}-{int(line_counts.get('Build-up base', 0))}-{between_count}-{front_count}"
+    rest_count = int(line_counts.get("レストディフェンス", 0))
+    between_count = int(line_counts.get("ライン間", 0))
+    front_count = int(line_counts.get("前線", 0))
+    shape = f"{rest_count}-{int(line_counts.get('ビルドアップ基盤', 0))}-{between_count}-{front_count}"
     lines.append(f"保持時の配置proxyは {shape}。後方に {rest_count} 枚、ライン間/前線に {between_count + front_count} 枚を置く構造です。")
     if not lane_counts.empty:
         dominant_lane = lane_counts.idxmax()
         lines.append(f"人数が最も集まったレーンは {dominant_lane}。過負荷を作った側として見ます。")
     top_progressor = structure_df.sort_values("Final-third Passes", ascending=False).iloc[0]
-    lines.append(f"前進の起点は {top_progressor['Player']}。Final-third passes {top_progressor['Final-third Passes']} 本です。")
+    lines.append(f"前進の起点は {top_progressor['Player']}。ファイナルサードへのパス {top_progressor['Final-third Passes']} 本です。")
     return structure_df, lines
 
 
@@ -3579,10 +3851,10 @@ def create_build_up_structure_chart(structure_df: pd.DataFrame) -> go.Figure:
         fig.update_yaxes(range=[-2, 82], visible=False, scaleanchor="x", scaleratio=1)
         return fig
     line_colors = {
-        "Rest defence": "#93C5FD",
-        "Build-up base": "#8DD3C7",
-        "Between lines": ARSENAL_GOLD,
-        "Front line": ARSENAL_RED,
+        "レストディフェンス": "#93C5FD",
+        "ビルドアップ基盤": "#8DD3C7",
+        "ライン間": ARSENAL_GOLD,
+        "前線": ARSENAL_RED,
     }
     for line_name, group in structure_df.groupby("Line"):
         fig.add_trace(
@@ -3600,10 +3872,10 @@ def create_build_up_structure_chart(structure_df: pd.DataFrame) -> go.Figure:
                     opacity=0.95,
                 ),
                 customdata=group[["Lane", "Touches", "Final-third Passes"]],
-                hovertemplate="<b>%{text}</b><br>%{fullData.name}<br>Lane: %{customdata[0]}<br>Touches: %{customdata[1]}<br>Final-third passes: %{customdata[2]}<extra></extra>",
+                hovertemplate="<b>%{text}</b><br>%{fullData.name}<br>レーン: %{customdata[0]}<br>タッチ数: %{customdata[1]}<br>ファイナルサードへのパス: %{customdata[2]}<extra></extra>",
             )
         )
-    for x_value, label in [(40, "rest defence"), (68, "build"), (92, "between lines")]:
+    for x_value, label in [(40, "レストD"), (68, "ビルド"), (92, "ライン間")]:
         fig.add_shape(type="line", x0=x_value, y0=0, x1=x_value, y1=80, line=dict(color="rgba(255,255,255,0.18)", dash="dot"))
         fig.add_annotation(x=x_value + 1, y=76, text=label, showarrow=False, font=dict(size=10, color=TEXT_MUTED))
     fig.update_xaxes(range=[-2, 122], visible=False)
@@ -3654,7 +3926,26 @@ def build_match_label(row: pd.Series) -> str:
     date_label = row["date"].strftime("%d %b %Y") if pd.notna(row["date"]) else "TBD"
     stage = f" {row['stage']}" if row.get("stage") else ""
     venue = "H" if row["venue"] == "Home" else "A"
-    return f"{date_label} | {row['opponent']} | {row['competition']}{stage} | {venue}"
+    if bool(row.get("finished")):
+        result = str(row.get("result", ""))
+        score = str(row.get("score", ""))
+        return f"{date_label} - {row['opponent']} ({venue}) - {row['competition']}{stage} - {result} {score}"
+    return f"{date_label} - {row['opponent']} ({venue}) - {row['competition']}{stage} - Upcoming"
+
+
+def build_match_picker_df(matches_df: pd.DataFrame, competition_filter: str, sort_order: str) -> pd.DataFrame:
+    picker_df = matches_df.copy()
+    if competition_filter != "All Competitions":
+        picker_df = picker_df[picker_df["competition"] == competition_filter]
+    if sort_order == "Oldest first":
+        picker_df = picker_df.sort_values("date", ascending=True)
+    elif sort_order == "Opponent A-Z":
+        picker_df = picker_df.sort_values(["opponent", "date"], ascending=[True, False])
+    elif sort_order == "Competition":
+        picker_df = picker_df.sort_values(["competition", "date"], ascending=[True, False])
+    else:
+        picker_df = picker_df.sort_values("date", ascending=False)
+    return picker_df.reset_index(drop=True)
 
 
 payload = fetch_team_payload()
@@ -3669,7 +3960,7 @@ if "dashboard_mode" not in st.session_state:
     st.session_state["dashboard_mode"] = "Team Analytics"
 
 with st.sidebar:
-    st.header("コマンドセンター")
+    st.header("Command Center")
     refresh_options = {
         "Off": 0,
         "5 min": 5,
@@ -3680,11 +3971,6 @@ with st.sidebar:
     }
     refresh_label = st.selectbox("自動更新", options=list(refresh_options.keys()), index=5)
     refresh_minutes = refresh_options[refresh_label]
-    competition_filter = st.multiselect(
-        "大会",
-        options=competition_options,
-        default=competition_options,
-    )
     view_mode = st.radio(
         "モード",
         options=["Team Analytics", "Player Analytics"],
@@ -3705,12 +3991,11 @@ inject_auto_refresh(refresh_minutes * 60)
 st.markdown(
     """
     <div class="hero">
-        <div class="hero-kicker">Live Arsenal Intelligence</div>
+        <div class="hero-kicker">Arsenal ライブ分析</div>
         <div class="hero-title">Arsenal Command Center</div>
         <div class="hero-subtitle">
-            A live Streamlit dashboard built around Arsenal fixtures, squad status, current player output,
-            news, and lineup-driven tactical visuals. The app refreshes automatically and supports every
-            competition currently present in Arsenal's latest fixture feed.
+            Arsenalの試合、スカッド状況、選手パフォーマンス、ニュース、ラインアップ由来の戦術ビジュアルを
+            ひとつにまとめた分析ダッシュボードです。自動更新され、Arsenalの試合フィードに含まれる全大会を対象にします。
         </div>
     </div>
     """,
@@ -3721,23 +4006,45 @@ if matches_df.empty:
     st.error("Live Arsenal match data is unavailable right now. Please try again shortly.")
     st.stop()
 
-filtered_matches = matches_df[matches_df["competition"].isin(competition_filter)].copy()
+st.markdown('<div class="panel">', unsafe_allow_html=True)
+st.subheader("Match Finder")
+st.caption("まず大会を選び、その大会内の試合を選びます。全大会で見たい場合は All Competitions を使います。")
+finder_cols = st.columns([1.35, 1.0])
+with finder_cols[0]:
+    match_competition_filter = st.selectbox("Competition", ["All Competitions"] + competition_options, index=0)
+with finder_cols[1]:
+    match_sort_order = st.selectbox("並び順", ["Latest first", "Competition", "Oldest first", "Opponent A-Z"], index=0)
+
+filtered_matches = (
+    matches_df[matches_df["competition"] == match_competition_filter].copy()
+    if match_competition_filter != "All Competitions"
+    else matches_df.copy()
+)
 if filtered_matches.empty:
     filtered_matches = matches_df.copy()
+
+match_picker_df = build_match_picker_df(matches_df, match_competition_filter, match_sort_order)
+if match_picker_df.empty:
+    st.warning("選択した大会に試合がありません。現在は全試合を表示します。")
+    match_picker_df = filtered_matches.sort_values("date", ascending=False).reset_index(drop=True)
+
+default_match = match_picker_df[match_picker_df["finished"]].head(1)
+default_match_id = default_match["match_id"].iloc[0] if not default_match.empty else match_picker_df["match_id"].iloc[0]
+selected_match_id = st.selectbox(
+    "Match",
+    options=match_picker_df["match_id"],
+    index=list(match_picker_df["match_id"]).index(default_match_id),
+    format_func=lambda match_id: build_match_label(match_picker_df.loc[match_picker_df["match_id"] == match_id].iloc[0]),
+)
+st.caption(f"{match_competition_filter}: {len(match_picker_df)} matches shown.")
+st.markdown("</div>", unsafe_allow_html=True)
+selected_match = filtered_matches.loc[filtered_matches["match_id"] == selected_match_id].iloc[0]
 
 review_history_df = build_review_history(filtered_matches)
 trend_summary_df = build_trend_summary(filtered_matches)
 recent_benchmark_df, recent_benchmark_notes = build_recent_results_benchmark(filtered_matches)
-
-default_match = filtered_matches[filtered_matches["finished"]].head(1)
-default_match_id = default_match["match_id"].iloc[0] if not default_match.empty else filtered_matches["match_id"].iloc[0]
-selected_match_id = st.selectbox(
-    "対象試合",
-    options=filtered_matches["match_id"],
-    index=list(filtered_matches["match_id"]).index(default_match_id),
-    format_func=lambda match_id: build_match_label(filtered_matches.loc[filtered_matches["match_id"] == match_id].iloc[0]),
-)
-selected_match = filtered_matches.loc[filtered_matches["match_id"] == selected_match_id].iloc[0]
+recent_xg_actual_df = build_recent_xg_actual_df(filtered_matches)
+recent_xg_notes = build_recent_xg_notes(recent_xg_actual_df)
 match_page_props = fetch_match_page_props(selected_match["page_url"])
 match_heatmap_payload = fetch_match_heatmap_payload(selected_match["page_url"])
 match_player_df = build_match_player_df(match_page_props, TEAM_ID)
@@ -4001,8 +4308,10 @@ top_metrics_row_two[1].metric("直近フォーム", recent_form_string, help=f"�
 top_metrics_row_two[2].metric("選択範囲の成績", selected_record, help="現在の大会フィルターで選ばれている試合群の通算 W-D-L")
 
 if layout_mode == "Guided Story":
+    render_analysis_flow()
+
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("1. 試合の前提")
+    st.subheader("1. Match Context")
     st.caption("まず試合の前提と結論を押さえます。ここで結果、相手、会場、試合の読み筋を固定してから細部に入ります。")
     context_left, context_right = st.columns([0.95, 1.05])
     with context_left:
@@ -4017,18 +4326,29 @@ if layout_mode == "Guided Story":
         st.write(f"**何が足りなかったか**  {match_missing_line}")
     with context_right:
         render_match_review(review_title, review_lines)
-        with st.expander("直近成績のベンチマーク", expanded=True):
-            for note in recent_benchmark_notes:
+        with st.expander("Recent xG Conversion", expanded=True):
+            st.caption("直近試合で、xGに対してどれだけ得点できたか、xGAに対してどれだけ失点したかを確認します。")
+            for note in recent_xg_notes:
                 st.write(f"- {note}")
-            st.plotly_chart(
-                create_recent_results_benchmark_chart(recent_benchmark_df),
-                width="stretch",
-                key=f"guided_recent_benchmark_{selected_match_id}",
-            )
+            xg_context_cols = st.columns(2)
+            with xg_context_cols[0]:
+                st.write("**Finishing Difference**")
+                st.plotly_chart(
+                    create_recent_xg_actual_chart(recent_xg_actual_df, "attack"),
+                    width="stretch",
+                    key=f"guided_recent_xg_attack_{selected_match_id}",
+                )
+            with xg_context_cols[1]:
+                st.write("**Defensive Difference**")
+                st.plotly_chart(
+                    create_recent_xg_actual_chart(recent_xg_actual_df, "defence"),
+                    width="stretch",
+                    key=f"guided_recent_xg_defence_{selected_match_id}",
+                )
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("2. 結果を動かした要因")
+    st.subheader("2. Result Drivers")
     st.caption("次に、勝敗を直接押した要素を確認します。xG、中央侵入、セットプレー、キープレイヤーを近くに置いて読めるようにしています。")
     driver_left, driver_right = st.columns([1.05, 0.95])
     with driver_left:
@@ -4039,11 +4359,11 @@ if layout_mode == "Guided Story":
         signal_cols[3].metric("ファイナルサードへのパス", f"{tactical_summary['final_third_passes']:.0f}")
         edge_cols = st.columns(2)
         with edge_cols[0]:
-            st.write("**Arsenalの優位**")
+            st.write("**Arsenal Edge**")
             for line in arsenal_edges or ["明確な優位は限定的で、細部勝負の試合でした。"]:
                 st.write(f"- {line}")
         with edge_cols[1]:
-            st.write("**相手の脅威**")
+            st.write("**Opponent Threat**")
             for line in opponent_edges or ["相手の脅威は大きくなく、Arsenal が主導権を持てた試合でした。"]:
                 st.write(f"- {line}")
     with driver_right:
@@ -4066,9 +4386,9 @@ if layout_mode == "Guided Story":
     flow_left, flow_right = st.columns([1.05, 0.95])
     with flow_left:
         st.markdown('<div class="panel">', unsafe_allow_html=True)
-        st.subheader("3. 試合の流れ")
+        st.subheader("3. Game Flow")
         st.caption("どの時間帯で試合が傾いたかを見ます。xG Race、時間帯別xG、スコア状態をまとめて置いています。")
-        flow_tabs = st.tabs(["xG推移", "時間帯別支配", "スコア状況別", "イベント"])
+        flow_tabs = st.tabs(["xG Race", "Phase Control", "Game State", "Events"])
         with flow_tabs[0]:
             st.plotly_chart(create_xg_race_chart(xg_race_df), width="stretch", key=f"guided_xg_race_{selected_match_id}")
             for note in match_swing_notes:
@@ -4090,7 +4410,7 @@ if layout_mode == "Guided Story":
 
     with flow_right:
         st.markdown('<div class="panel">', unsafe_allow_html=True)
-        st.subheader("4. チャンスと陣地")
+        st.subheader("4. Chances & Territory")
         st.caption("流れの次に、どこまで前進でき、どれだけ良いチャンスに変換できたかを確認します。")
         chance_cols = st.columns(2)
         chance_cols[0].metric("オープンプレー xG", f"{shot_profile['open_play_xg']:.2f}")
@@ -4102,7 +4422,7 @@ if layout_mode == "Guided Story":
         st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("5. 戦術構造")
+    st.subheader("5. Tactical Structure")
     st.caption("ここで構造を読みます。保持、脅威ゾーン、プレッシング、守備、選手関係性を同じ章にまとめています。")
     if control_room_lines:
         control_cols = st.columns(len(control_room_lines))
@@ -4117,7 +4437,7 @@ if layout_mode == "Guided Story":
                 """,
                 unsafe_allow_html=True,
             )
-    structure_tabs = st.tabs(["脅威ゾーン", "ビルドアップ", "プレッシング", "構造診断", "マップ"])
+    structure_tabs = st.tabs(["Threat Zones", "Build-up", "Pressing", "Structure Diagnosis", "Maps"])
     with structure_tabs[0]:
         tz_left, tz_right = st.columns([1.12, 0.88])
         with tz_left:
@@ -4129,6 +4449,16 @@ if layout_mode == "Guided Story":
                 ].sort_values("Threat", ascending=False),
                 width="stretch",
                 hide_index=True,
+                column_config={
+                    "Zone": st.column_config.TextColumn("ゾーン", width="medium"),
+                    "Threat": st.column_config.NumberColumn("脅威度", format="%.2f"),
+                    "Primary Builder": st.column_config.TextColumn("主なビルドアップ関与者", width="medium"),
+                    "Top Contributors": st.column_config.TextColumn("上位関与者", width="large"),
+                    "Main Shooter": st.column_config.TextColumn("主なシューター", width="medium"),
+                    "Shot xG": st.column_config.NumberColumn("シュートxG", format="%.2f"),
+                    "Progression proxy": st.column_config.NumberColumn("前進proxy", format="%.2f"),
+                    "Shots": st.column_config.NumberColumn("シュート数"),
+                },
             )
     with structure_tabs[1]:
         build_left, build_right = st.columns([1.12, 0.88])
@@ -4137,7 +4467,18 @@ if layout_mode == "Guided Story":
         with build_right:
             for line in build_up_structure_lines:
                 st.write(f"- {line}")
-            st.dataframe(build_up_structure_df[["Player", "Line", "Lane", "Touches", "Final-third Passes"]], width="stretch", hide_index=True)
+            st.dataframe(
+                build_up_structure_df[["Player", "Line", "Lane", "Touches", "Final-third Passes"]],
+                width="stretch",
+                hide_index=True,
+                column_config={
+                    "Player": st.column_config.TextColumn("選手", width="medium"),
+                    "Line": st.column_config.TextColumn("高さ", width="medium"),
+                    "Lane": st.column_config.TextColumn("レーン", width="medium"),
+                    "Touches": st.column_config.NumberColumn("タッチ数"),
+                    "Final-third Passes": st.column_config.NumberColumn("ファイナルサードへのパス"),
+                },
+            )
     with structure_tabs[2]:
         press_left, press_right = st.columns([1.0, 1.0])
         with press_left:
@@ -4160,7 +4501,7 @@ if layout_mode == "Guided Story":
             for line in opponent_possession_review_lines[:3]:
                 st.write(f"- {line}")
     with structure_tabs[4]:
-        map_tabs = st.tabs(["シュートマップ", "パスネットワーク", "関係性"])
+        map_tabs = st.tabs(["Shot Map", "Pass Network", "Relationships"])
         with map_tabs[0]:
             st.plotly_chart(create_match_shot_map(shot_df) if not shot_df.empty else create_shot_threat_map(player_df), width="stretch", key=f"guided_shot_map_{selected_match_id}")
         with map_tabs[1]:
@@ -4180,9 +4521,9 @@ if layout_mode == "Guided Story":
     player_left, player_right = st.columns([1.05, 0.95])
     with player_left:
         st.markdown('<div class="panel">', unsafe_allow_html=True)
-        st.subheader("6. 選手レイヤー")
+        st.subheader("6. Player Layer")
         st.caption("最後に選手へ降ります。試合単位の貢献とシーズン全体の評価を分けて見ます。")
-        player_tabs = st.tabs(["試合への影響", "選手深掘り", "シーズン"])
+        player_tabs = st.tabs(["Match Impact", "Player Deep Dive", "Season"])
         with player_tabs[0]:
             st.dataframe(player_impact_df, width="stretch", hide_index=True)
             st.dataframe(role_profile_df, width="stretch", hide_index=True)
@@ -4210,17 +4551,17 @@ if layout_mode == "Guided Story":
 
     with player_right:
         st.markdown('<div class="panel">', unsafe_allow_html=True)
-        st.subheader("7. 監督視点とアウトプット")
+        st.subheader("7. Coach View & Output")
         st.caption("分析を次戦準備と共有用アウトプットに変換します。")
-        output_tabs = st.tabs(["監督視点", "レポート", "ニュース・怪我"])
+        output_tabs = st.tabs(["Coach View", "Report", "News & Injuries"])
         with output_tabs[0]:
             st.write(coach_takeaways["staff_note"])
             for line in coach_takeaways["continue"]:
-                st.write(f"- Continue: {line}")
+                st.write(f"- 継続: {line}")
             for line in coach_takeaways["change"]:
-                st.write(f"- Change: {line}")
+                st.write(f"- 修正: {line}")
             for line in opponent_game_plan_lines:
-                st.write(f"- Plan: {line}")
+                st.write(f"- 次戦プラン: {line}")
         with output_tabs[1]:
             st.download_button(
                 "マッチレポートをダウンロード (.md)",
@@ -4241,9 +4582,9 @@ if layout_mode == "Guided Story":
             with st.expander("X Post Preview"):
                 st.text_area("X投稿 / スレッド案", value=x_post_pack, height=320, key=f"guided_x_post_preview_{selected_match_id}")
         with output_tabs[2]:
-            st.write("**怪我・離脱**")
+            st.write("**Injuries & Absences**")
             st.dataframe(injury_df, width="stretch", hide_index=True)
-            st.write("**ニュース**")
+            st.write("**News**")
             if news_df.empty:
                 st.info("ニュースを一時的に取得できません。")
             else:
@@ -4266,17 +4607,17 @@ if layout_mode == "Guided Story":
                 "role": "assistant",
                 "content": (
                     f"{selected_match['opponent']} 戦を見ながら深掘りできます。"
-                    "『なぜ勝てた？』『どの時間帯で押し込んだ？』『誰がThreat Zoneを作った？』のように聞いてください。"
+                    "『なぜ勝てた？』『どの時間帯で押し込んだ？』『誰が脅威ゾーンを作った？』のように聞いてください。"
                 ),
             }
         ]
     if chat_key not in st.session_state:
         st.session_state[chat_key] = []
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("8. Arsenal分析チャット")
+    st.subheader("8. Arsenal Analyst Chat")
     st.caption("最後に疑問を深掘りします。ここまでの章で見たデータを使って質問できます。")
     prompt_cols = st.columns(4)
-    suggested_prompts = ["なぜ勝てた？", "どの時間帯で優位だった？", "誰がThreat Zoneを作った？", "次戦に活かすなら？"]
+    suggested_prompts = ["なぜ勝てた？", "どの時間帯で優位だった？", "誰が脅威ゾーンを作った？", "次戦に活かすなら？"]
     for index, prompt in enumerate(suggested_prompts):
         if prompt_cols[index].button(prompt, use_container_width=True, key=f"guided_prompt_{index}_{selected_match_id}"):
             st.session_state[chat_key].append({"role": "user", "content": prompt})
@@ -4293,7 +4634,7 @@ if layout_mode == "Guided Story":
     st.stop()
 
 st.markdown('<div class="panel">', unsafe_allow_html=True)
-st.subheader(f"現在のモード: {'選手分析' if view_mode == 'Player Analytics' else 'チーム分析'}")
+st.subheader(f"Current Mode: {'Player Analytics' if view_mode == 'Player Analytics' else 'Team Analytics'}")
 render_section_benefit("Current Mode")
 if view_mode == "Player Analytics":
     st.caption("選手分析が有効です。選手単位の試合影響度と深掘りを優先して表示します。")
@@ -4303,7 +4644,7 @@ st.markdown("</div>", unsafe_allow_html=True)
 
 if view_mode == "Player Analytics":
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("選手マッチボード")
+    st.subheader("Player Matchboard")
     render_section_benefit("Player Matchboard")
     if deep_dive_candidates:
         top_player = st.selectbox(
@@ -4351,7 +4692,7 @@ summary_col, trend_col = st.columns([1.05, 1.35])
 
 with summary_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("試合センター")
+    st.subheader("Match Center")
     render_section_benefit("Match Center")
     detail_left, detail_right = st.columns(2)
     detail_left.metric("会場", selected_match["venue"])
@@ -4373,58 +4714,80 @@ with summary_col:
 
 with trend_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("直近成績")
+    st.subheader("Recent Results")
     render_section_benefit("Recent Results")
-    completed = filtered_matches[filtered_matches["finished"]].sort_values("date")
-    result_fig = go.Figure()
-    result_fig.add_trace(
-        go.Scatter(
-            x=completed["date"],
-            y=completed["arsenal_goals"],
-            mode="lines+markers",
-            name="Arsenal Goals",
-            line=dict(color=ARSENAL_GOLD, width=3),
-            marker=dict(size=9),
+    st.caption("直近試合で、作ったチャンス量に対して何点取れたか、許したチャンス量に対して何点失ったかを見ます。")
+    xg_attack_col, xg_defence_col = st.columns(2)
+    with xg_attack_col:
+        st.write("**Finishing Difference**")
+        st.plotly_chart(
+            create_recent_xg_actual_chart(recent_xg_actual_df, "attack"),
+            width="stretch",
+            key=f"recent_xg_attack_{selected_match_id}",
         )
-    )
-    result_fig.add_trace(
-        go.Scatter(
-            x=completed["date"],
-            y=completed["opponent_goals"],
-            mode="lines+markers",
-            name="Goals Conceded",
-            line=dict(color=ARSENAL_RED, width=3),
-            marker=dict(size=9),
+    with xg_defence_col:
+        st.write("**Defensive Difference**")
+        st.plotly_chart(
+            create_recent_xg_actual_chart(recent_xg_actual_df, "defence"),
+            width="stretch",
+            key=f"recent_xg_defence_{selected_match_id}",
         )
-    )
-    result_fig = base_chart_layout(result_fig, height=300)
-    result_fig.update_xaxes(showgrid=False)
-    result_fig.update_yaxes(gridcolor="rgba(159,176,196,0.14)", zeroline=False, title=None)
-    st.plotly_chart(result_fig, width="stretch")
-    st.caption("下の比較は、直近成績が選択中コンペ範囲の平均や目標ラインに対して良いのか悪いのかを見るためのベンチマークです。")
-    st.plotly_chart(
-        create_recent_results_benchmark_chart(recent_benchmark_df),
-        width="stretch",
-        key=f"recent_results_benchmark_{selected_match_id}",
-    )
-    for note in recent_benchmark_notes:
+    for note in recent_xg_notes:
         st.write(f"- {note}")
-    if not trend_summary_df.empty:
-        st.dataframe(trend_summary_df, width="stretch", hide_index=True)
-    if not recent_benchmark_df.empty:
+    if not recent_xg_actual_df.empty:
         st.dataframe(
-            recent_benchmark_df,
+            recent_xg_actual_df,
             width="stretch",
             hide_index=True,
             column_config={
-                "Metric": st.column_config.TextColumn("Metric", width="medium"),
-                "Recent": st.column_config.NumberColumn("Recent", format="%.2f"),
-                "Season Avg": st.column_config.NumberColumn("Selected Avg", format="%.2f"),
-                "Target": st.column_config.NumberColumn("Good Line", format="%.2f"),
-                "Status": st.column_config.TextColumn("Status", width="small"),
-                "Delta vs Avg": st.column_config.NumberColumn("Delta vs Avg", format="%+.2f"),
+                "Date": st.column_config.TextColumn("日付", width="small"),
+                "Match": st.column_config.TextColumn("試合", width="medium"),
+                "Opponent": st.column_config.TextColumn("相手", width="medium"),
+                "Result": st.column_config.TextColumn("結果", width="small"),
+                "Goals": st.column_config.NumberColumn("得点", format="%d"),
+                "xG": st.column_config.NumberColumn("xG", format="%.2f"),
+                "G - xG": st.column_config.NumberColumn("得点 - xG", format="%+.2f"),
+                "Goals Against": st.column_config.NumberColumn("失点", format="%d"),
+                "xGA": st.column_config.NumberColumn("xGA", format="%.2f"),
+                "GA - xGA": st.column_config.NumberColumn("失点 - xGA", format="%+.2f"),
             },
         )
+    st.caption("補助的に、直近成績が選択中コンペ範囲の平均や目標ラインに対して良いのか悪いのかも確認できます。")
+    with st.expander("Result benchmark", expanded=False):
+        benchmark_goal_col, benchmark_rate_col = st.columns(2)
+        with benchmark_goal_col:
+            st.write("**Goal Metrics / Match**")
+            st.plotly_chart(
+                create_recent_results_benchmark_chart(recent_benchmark_df, "ゴール/試合"),
+                width="stretch",
+                key=f"recent_results_benchmark_goals_{selected_match_id}",
+            )
+        with benchmark_rate_col:
+            st.write("**Rate Metrics (%)**")
+            st.plotly_chart(
+                create_recent_results_benchmark_chart(recent_benchmark_df, "割合%"),
+                width="stretch",
+                key=f"recent_results_benchmark_rates_{selected_match_id}",
+            )
+        for note in recent_benchmark_notes:
+            st.write(f"- {note}")
+        if not trend_summary_df.empty:
+            st.dataframe(trend_summary_df, width="stretch", hide_index=True)
+        if not recent_benchmark_df.empty:
+            st.dataframe(
+                recent_benchmark_df,
+                width="stretch",
+                hide_index=True,
+                column_config={
+                    "Metric": st.column_config.TextColumn("指標", width="medium"),
+                    "Unit": st.column_config.TextColumn("単位", width="small"),
+                    "Recent": st.column_config.NumberColumn("直近", format="%.2f"),
+                    "Season Avg": st.column_config.NumberColumn("選択範囲平均", format="%.2f"),
+                    "Target": st.column_config.NumberColumn("良好ライン", format="%.2f"),
+                    "Status": st.column_config.TextColumn("判定", width="small"),
+                    "Delta vs Avg": st.column_config.NumberColumn("平均との差", format="%+.2f"),
+                },
+            )
     st.markdown("</div>", unsafe_allow_html=True)
 
 review_col, notes_col = st.columns([1.1, 0.9])
@@ -4436,7 +4799,7 @@ with review_col:
 
 with notes_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("試合の主要シグナル")
+    st.subheader("Match Signals")
     render_section_benefit("Key Match Signals")
     key_metrics = st.columns(2)
     key_metrics[0].metric("オープンプレー xG", f"{shot_profile['open_play_xg']:.2f}")
@@ -4450,7 +4813,7 @@ verdict_col, player_col = st.columns([1.15, 0.85])
 
 with verdict_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("この試合が示すこと")
+    st.subheader("Match Verdict")
     render_section_benefit("What This Match Says")
     st.write(f"**Arsenal はどうだったか**  {match_how_line}")
     st.write(f"**なぜこの結果になったか**  {match_why_line}")
@@ -4459,7 +4822,7 @@ with verdict_col:
 
 with player_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("キープレイヤー診断")
+    st.subheader("Key Player Verdict")
     render_section_benefit("Key Player Verdict")
     render_player_focus_card(
         selected_deep_dive_player,
@@ -4478,7 +4841,7 @@ with player_col:
     st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown('<div class="panel">', unsafe_allow_html=True)
-st.subheader("試合コントロールルーム")
+st.subheader("Match Control Room")
 render_section_benefit("Match Control Room")
 st.caption("試合を直感的に読むための4層です。xT/pressing/possession は公開FotMobデータから作るproxyなので、映像分析の入り口として使います。")
 if control_room_lines:
@@ -4494,7 +4857,7 @@ if control_room_lines:
             """,
             unsafe_allow_html=True,
         )
-control_tabs = st.tabs(["脅威ゾーン", "攻撃の波", "ビルドアップ構造", "プレッシング"])
+control_tabs = st.tabs(["Threat Zones", "Attacking Waves", "Build-up Shape", "Pressing"])
 with control_tabs[0]:
     render_section_benefit("Threat Zones")
     threat_left, threat_right = st.columns([1.15, 0.85])
@@ -4513,8 +4876,8 @@ with control_tabs[0]:
             width="stretch",
             hide_index=True,
             column_config={
-                "Zone": st.column_config.TextColumn("Zone", width="medium"),
-                "Threat": st.column_config.NumberColumn("Threat", format="%.2f"),
+                "Zone": st.column_config.TextColumn("ゾーン", width="medium"),
+                "Threat": st.column_config.NumberColumn("脅威度", format="%.2f"),
                 "Primary Builder": st.column_config.TextColumn("主なビルドアップ関与者", width="medium"),
                 "Top Contributors": st.column_config.TextColumn("上位関与者", width="large"),
                 "Main Shooter": st.column_config.TextColumn("主なシューター", width="medium"),
@@ -4556,13 +4919,17 @@ with control_tabs[2]:
             width="stretch",
             hide_index=True,
             column_config={
-                "Player": st.column_config.TextColumn("Player", width="medium"),
-                "Line": st.column_config.TextColumn("Line", width="medium"),
-                "Lane": st.column_config.TextColumn("Lane", width="medium"),
+                "Player": st.column_config.TextColumn("選手", width="medium"),
+                "Line": st.column_config.TextColumn("高さ", width="medium"),
+                "Lane": st.column_config.TextColumn("レーン", width="medium"),
+                "Touches": st.column_config.NumberColumn("タッチ数"),
+                "Final-third Passes": st.column_config.NumberColumn("ファイナルサードへのパス"),
             },
         )
 with control_tabs[3]:
     render_section_benefit("Pressing Lens")
+    st.caption("50未満は懸念、50-69は要観察、70以上は良好です。単なる強度ではなく、回収位置・中央封鎖・奪回後の安全性・規律を分けて読みます。")
+    render_pressing_reading_cards(pressing_profile_df)
     press_left, press_right = st.columns([1.0, 1.0])
     with press_left:
         st.plotly_chart(
@@ -4578,9 +4945,11 @@ with control_tabs[3]:
             width="stretch",
             hide_index=True,
             column_config={
-                "Metric": st.column_config.TextColumn("Metric", width="medium"),
-                "Score": st.column_config.NumberColumn("Score", format="%.1f"),
-                "Signal": st.column_config.TextColumn("Signal", width="large"),
+                "Metric": st.column_config.TextColumn("指標", width="medium"),
+                "What it means": st.column_config.TextColumn("何がわかるか", width="large"),
+                "Score": st.column_config.NumberColumn("スコア", format="%.1f"),
+                "判定": st.column_config.TextColumn("判定", width="small"),
+                "Signal": st.column_config.TextColumn("根拠", width="large"),
             },
         )
 st.markdown("</div>", unsafe_allow_html=True)
@@ -4589,7 +4958,7 @@ coach_col, prep_col = st.columns([1.0, 1.0])
 
 with coach_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("監督向け示唆")
+    st.subheader("Coach Takeaways")
     render_section_benefit("Coach Takeaways")
     st.write(coach_takeaways["staff_note"])
     for line in coach_takeaways["continue"]:
@@ -4600,7 +4969,7 @@ with coach_col:
 
 with prep_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("次戦への準備")
+    st.subheader("Next Match Preparation")
     render_section_benefit("Next Match Prep")
     st.write(coach_takeaways["next_up"])
     for line in coach_takeaways["selection"]:
@@ -4615,7 +4984,7 @@ structure_left, structure_right = st.columns([1.1, 0.9])
 
 with structure_left:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("構造診断")
+    st.subheader("Structure Diagnosis")
     render_section_benefit("Structural Diagnosis")
     st.plotly_chart(
         create_structural_diagnosis_chart(structural_diagnosis_df),
@@ -4626,7 +4995,7 @@ with structure_left:
 
 with structure_right:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("構造的に見た理由")
+    st.subheader("Structural Explanation")
     render_section_benefit("Why Structurally")
     for line in structural_summary_lines:
         st.write(f"- {line}")
@@ -4647,7 +5016,7 @@ attack_col, opp_pos_col = st.columns([1.0, 1.0])
 
 with attack_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("攻撃レビュー")
+    st.subheader("Attack Review")
     render_section_benefit("Attack Review")
     for line in attack_review_lines:
         st.write(f"- {line}")
@@ -4655,7 +5024,7 @@ with attack_col:
 
 with opp_pos_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("相手保持レビュー")
+    st.subheader("Opponent Possession Review")
     render_section_benefit("Opponent Possession Review")
     for line in opponent_possession_review_lines:
         st.write(f"- {line}")
@@ -4665,7 +5034,7 @@ half_col, role_col = st.columns([1.0, 1.0])
 
 with half_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("前後半の変化")
+    st.subheader("Half-by-Half Shift")
     render_section_benefit("Half-by-Half Adjustments")
     st.plotly_chart(
         create_phase_comparison_chart(phase_comparison_df),
@@ -4678,7 +5047,7 @@ with half_col:
 
 with role_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("役割評価")
+    st.subheader("Role Evaluation")
     render_section_benefit("Role Evaluation")
     st.dataframe(
         role_profile_df,
@@ -4696,7 +5065,7 @@ phase_col, zone_col = st.columns([1.05, 0.95])
 
 with phase_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("時間帯別の支配")
+    st.subheader("Phase Control")
     render_section_benefit("Phase Control")
     st.caption("どの時間帯で優位だったかを xG ベースで分解。")
     st.plotly_chart(create_phase_split_chart(arsenal_phase_df, opponent_phase_df), width="stretch")
@@ -4704,7 +5073,7 @@ with phase_col:
 
 with zone_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("ゾーン別プロフィール")
+    st.subheader("Zone Profile")
     render_section_benefit("Zone Profile")
     zone_metrics = st.columns(2)
     zone_metrics[0].metric("Zone 14 Shots", arsenal_zone_profile["zone14_entries"])
@@ -4724,7 +5093,7 @@ driver_col, threat_col = st.columns([1.0, 1.0])
 
 with driver_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("Arsenalの優位")
+    st.subheader("Arsenal Edge")
     render_section_benefit("Arsenal Edge")
     if arsenal_edges:
         for line in arsenal_edges:
@@ -4736,7 +5105,7 @@ with driver_col:
 
 with threat_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("相手の脅威")
+    st.subheader("Opponent Threat")
     render_section_benefit("Opponent Threat")
     if opponent_edges:
         for line in opponent_edges:
@@ -4836,7 +5205,7 @@ with left_col:
 
 with right_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("シーズン上位パフォーマー")
+    st.subheader("Season Top Performers")
     render_section_benefit("Top Arsenal Performers")
     if top_players_df.empty:
         st.info("上位選手データを利用できません。")
@@ -4866,7 +5235,7 @@ analysis_col, access_col = st.columns([1.05, 0.95])
 
 with analysis_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("チャンス品質プロフィール")
+    st.subheader("Chance Quality Profile")
     render_section_benefit("Chance Quality Profile")
     chance_metrics = st.columns(4)
     chance_metrics[0].metric("シュート数", shot_profile["shots"])
@@ -4881,7 +5250,7 @@ with analysis_col:
 
 with access_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("陣地と侵入")
+    st.subheader("Territory & Access")
     render_section_benefit("Territory & Access")
     territory_metrics = st.columns(4)
     territory_metrics[0].metric("ファイナルサードへのパス", f"{tactical_summary['final_third_passes']:.0f}")
@@ -4899,7 +5268,7 @@ xg_col, map_col = st.columns([0.95, 1.05])
 
 with xg_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("xG推移")
+    st.subheader("xG Race")
     render_section_benefit("xG Race")
     st.caption("Arsenalと相手の累積xGをシュートごとに追い、どの時間帯で流れが傾いたかを見ます。")
     st.plotly_chart(create_xg_race_chart(xg_race_df), width="stretch")
@@ -4911,7 +5280,7 @@ defence_col, state_col = st.columns([1.0, 1.0])
 
 with defence_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("守備レビュー")
+    st.subheader("Defensive Review")
     render_section_benefit("Defensive Review")
     defence_metrics = st.columns(3)
     defence_metrics[0].metric("相手 xG", f"{opp_shot_profile['xg']:.2f}")
@@ -4923,7 +5292,7 @@ with defence_col:
 
 with state_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("スコア状況別分析")
+    st.subheader("Game State Analysis")
     render_section_benefit("Score State Analysis")
     if score_state_df.empty:
         st.info("この試合ではスコア状況別データを利用できません。")
@@ -4938,7 +5307,7 @@ event_left, event_right = st.columns([1.0, 1.0])
 
 with event_left:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("イベントタイムライン")
+    st.subheader("Event Timeline")
     render_section_benefit("Event Timeline")
     st.plotly_chart(
         create_event_timeline_chart(event_df),
@@ -4953,7 +5322,7 @@ with event_left:
 
 with event_right:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    tab_periods, tab_subs = st.tabs(["時間帯スタッツ", "交代の影響"])
+    tab_periods, tab_subs = st.tabs(["Phase Stats", "Substitution Impact"])
     with tab_periods:
         if period_stats_df.empty:
             st.info("この試合では時間帯スタッツを利用できません。")
@@ -4970,7 +5339,7 @@ map_col, side_col = st.columns([1.05, 0.95])
 
 with map_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("シュートマップ")
+    st.subheader("Shot Map")
     render_section_benefit("Match Shot Map")
     st.caption("選択したArsenalの試合におけるFotMobの実シュート位置です。円の大きさはxGを表します。")
     if shot_df.empty:
@@ -4980,14 +5349,14 @@ with map_col:
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("パスネットワーク")
+    st.subheader("Pass Network")
     render_section_benefit("Pass Network")
     st.caption("FotMobのラインアップ、パス関連指標、関係性の重みから作成しています。")
     st.plotly_chart(create_pass_map(player_df), width="stretch")
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("選手間の関係性")
+    st.subheader("Player Relationships")
     render_section_benefit("Player Relationships")
     rel_left, rel_right = st.columns([1.05, 0.95])
     with rel_left:
@@ -4996,7 +5365,7 @@ with map_col:
         else:
             st.plotly_chart(create_hub_chart(relationship_hubs_df), width="stretch")
     with rel_right:
-        tab_links, tab_hubs = st.tabs(["主な接続", "ハブ選手"])
+        tab_links, tab_hubs = st.tabs(["Key Links", "Hub Players"])
         with tab_links:
             st.dataframe(relationship_links_df, width="stretch", hide_index=True)
         with tab_hubs:
@@ -5005,7 +5374,7 @@ with map_col:
 
 with side_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("怪我・離脱状況")
+    st.subheader("Injuries & Absences")
     render_section_benefit("Injury Tracker")
     if injury_df.empty:
         st.success("最新のチームフィードでは離脱中のArsenal選手は返されていません。")
@@ -5023,7 +5392,7 @@ with side_col:
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("Arsenalニュース")
+    st.subheader("Arsenal News")
     render_section_benefit("Arsenal News")
     if news_df.empty:
         st.info("ニュースを一時的に取得できません。")
@@ -5066,7 +5435,7 @@ history_col, snapshot_col = st.columns([1.0, 1.0])
 
 with history_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    tab_history, tab_moments = st.tabs(["レビュー履歴", "重要局面"])
+    tab_history, tab_moments = st.tabs(["Review History", "Key Moments"])
     with tab_history:
         st.dataframe(
             review_history_df,
@@ -5098,14 +5467,14 @@ with history_col:
 
 with snapshot_col:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.subheader("分析スナップショット")
+    st.subheader("Analysis Snapshot")
     render_section_benefit("Analyst Snapshot")
     for line in analyst_snapshot_lines:
         st.write(line)
     st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown('<div class="panel">', unsafe_allow_html=True)
-st.subheader("Cannon型 分析テンプレート")
+st.subheader("Cannon-Style Analysis Template")
 render_section_benefit("Cannon-Style Analysis Template")
 template_tabs = st.tabs([section["section"].split(". ", 1)[1] for section in analysis_template_sections])
 for tab, section in zip(template_tabs, analysis_template_sections):
@@ -5120,7 +5489,7 @@ for tab, section in zip(template_tabs, analysis_template_sections):
 st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown('<div class="panel">', unsafe_allow_html=True)
-st.subheader("フルマッチレポート")
+st.subheader("Full Match Report")
 render_section_benefit("Full Match Report")
 report_top_left, report_top_right = st.columns([1.15, 0.85])
 with report_top_left:
@@ -5168,25 +5537,25 @@ st.download_button(
     mime="text/plain",
     use_container_width=True,
 )
-with st.expander("X投稿プレビュー"):
+with st.expander("X Post Preview"):
     st.text_area(
         "X投稿 / スレッド案",
         value=x_post_pack,
         height=360,
         key=f"x_post_pack_preview_{selected_match_id}",
     )
-with st.expander("テキストレポートを開く"):
+with st.expander("Open Text Report"):
     st.markdown(full_match_report)
 st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown('<div class="panel">', unsafe_allow_html=True)
-st.subheader("シーズン選手パフォーマンス分析")
+st.subheader("Season Player Performance Lab")
 render_section_benefit("Season Player Performance Lab")
 st.caption("1試合ではなく、シーズン全体で誰が良いパフォーマンスを出しているかを見る補助モジュールです。FotMob公開フィードの season rating、G/A、直近評価、Top-player recognition、availability を合成しています。")
 if season_player_performance_df.empty:
     st.info("シーズン選手評価データを利用できません。")
 else:
-    with st.expander("シーズン選手分析を開く", expanded=False):
+    with st.expander("Open Season Player Analysis", expanded=False):
         season_left, season_right = st.columns([1.15, 0.85])
         with season_left:
             st.plotly_chart(
@@ -5203,7 +5572,7 @@ else:
             focus_season = season_player_performance_df[season_player_performance_df["Player"] == season_focus].iloc[0]
             season_metrics = st.columns(2)
             season_metrics[0].metric("パフォーマンススコア", f"{focus_season['Performance Score']:.1f}")
-            season_metrics[1].metric("プロフィール", focus_season["Profile"])
+            season_metrics[1].metric("タイプ", focus_season["Profile"])
             season_metrics = st.columns(2)
             season_metrics[0].metric("シーズン評価", f"{focus_season['Season Rating']:.2f}")
             season_metrics[1].metric("G+A", int(focus_season["Goal Contributions"]))
@@ -5218,21 +5587,21 @@ else:
             width="stretch",
             hide_index=True,
             column_config={
-                "Player": st.column_config.TextColumn("Player", width="medium"),
-                "Role": st.column_config.TextColumn("Role", width="small"),
-                "Status": st.column_config.TextColumn("Status", width="small"),
-                "Profile": st.column_config.TextColumn("Profile", width="medium"),
-                "Verdict": st.column_config.TextColumn("Verdict", width="large"),
-                "Performance Score": st.column_config.NumberColumn("Performance Score", format="%.1f"),
-                "Season Rating": st.column_config.NumberColumn("Season Rating", format="%.2f"),
-                "Last Match Rating": st.column_config.NumberColumn("Last Match Rating", format="%.2f"),
+                "Player": st.column_config.TextColumn("選手", width="medium"),
+                "Role": st.column_config.TextColumn("役割", width="small"),
+                "Status": st.column_config.TextColumn("状態", width="small"),
+                "Profile": st.column_config.TextColumn("タイプ", width="medium"),
+                "Verdict": st.column_config.TextColumn("評価", width="large"),
+                "Performance Score": st.column_config.NumberColumn("パフォーマンススコア", format="%.1f"),
+                "Season Rating": st.column_config.NumberColumn("シーズン評価", format="%.2f"),
+                "Last Match Rating": st.column_config.NumberColumn("直近試合評価", format="%.2f"),
             },
         )
         st.caption("注意: minutes、progressive carries、pressures などの完全なシーズンイベント指標は公開フィードにないため、この評価は多角proxyです。")
 st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown('<div class="panel">', unsafe_allow_html=True)
-st.subheader("選手深掘り")
+st.subheader("Player Deep Dive")
 render_section_benefit("Player Deep Dive")
 if deep_dive_candidates:
     selected_deep_dive_player = st.selectbox(
@@ -5270,7 +5639,7 @@ if deep_dive_candidates:
         )
     with deep_right:
         player_shot_df = player_deep_dive.get("shot_df", pd.DataFrame())
-        heatmap_tab, shotmap_tab = st.tabs(["ヒートマップ", "シュートマップ"])
+        heatmap_tab, shotmap_tab = st.tabs(["Heatmap", "Shot Map"])
         with heatmap_tab:
             if not player_heatmap_df.empty:
                 st.plotly_chart(
@@ -5320,7 +5689,7 @@ else:
 st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown('<div class="panel">', unsafe_allow_html=True)
-st.subheader("Arsenal分析チャット")
+st.subheader("Arsenal Analyst Chat")
 render_section_benefit("Arsenal Analyst Chat")
 prompt_cols = st.columns(4)
 suggested_prompts = [
