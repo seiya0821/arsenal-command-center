@@ -1667,35 +1667,35 @@ def build_result_drivers(
     opponent_edges: list[str] = []
 
     if shot_profile["xg"] - opp_shot_profile["xg"] >= 0.4:
-        arsenal_edges.append(f"xG edge: {shot_profile['xg']:.2f} vs {opp_shot_profile['xg']:.2f}")
+        arsenal_edges.append(f"xG優位: {shot_profile['xg']:.2f} vs {opp_shot_profile['xg']:.2f}")
     elif opp_shot_profile["xg"] - shot_profile["xg"] >= 0.4:
-        opponent_edges.append(f"xG edge allowed: {opp_shot_profile['xg']:.2f} vs {shot_profile['xg']:.2f}")
+        opponent_edges.append(f"xGで劣勢: {opp_shot_profile['xg']:.2f} vs {shot_profile['xg']:.2f}")
 
     if shot_profile["central_shots"] > opp_shot_profile["central_shots"]:
-        arsenal_edges.append(f"Central shot control: {shot_profile['central_shots']} vs {opp_shot_profile['central_shots']}")
+        arsenal_edges.append(f"中央シュート優位: {shot_profile['central_shots']} vs {opp_shot_profile['central_shots']}")
     elif opp_shot_profile["central_shots"] > shot_profile["central_shots"]:
         opponent_edges.append(
-            f"Central box access conceded: {opp_shot_profile['central_shots']} vs {shot_profile['central_shots']}"
+            f"中央侵入を許した: {opp_shot_profile['central_shots']} vs {shot_profile['central_shots']}"
         )
 
     if tactical_summary["final_third_passes"] >= 25:
-        arsenal_edges.append(f"Final-third progression: {tactical_summary['final_third_passes']:.0f} passes")
+        arsenal_edges.append(f"敵陣前進量: ファイナルサードへのパス {tactical_summary['final_third_passes']:.0f} 本")
     else:
-        opponent_edges.append(f"Limited territorial control: {tactical_summary['final_third_passes']:.0f} final-third passes")
+        opponent_edges.append(f"敵陣定着不足: ファイナルサードへのパス {tactical_summary['final_third_passes']:.0f} 本")
 
     if arsenal_zone_profile["zone14_entries"] > opponent_zone_profile["zone14_entries"]:
         arsenal_edges.append(
-            f"Zone 14 access: {arsenal_zone_profile['zone14_entries']} vs {opponent_zone_profile['zone14_entries']}"
+            f"Zone 14侵入優位: {arsenal_zone_profile['zone14_entries']} vs {opponent_zone_profile['zone14_entries']}"
         )
     elif opponent_zone_profile["zone14_entries"] > arsenal_zone_profile["zone14_entries"]:
         opponent_edges.append(
-            f"Opponent Zone 14 access: {opponent_zone_profile['zone14_entries']} vs {arsenal_zone_profile['zone14_entries']}"
+            f"相手Zone 14侵入: {opponent_zone_profile['zone14_entries']} vs {arsenal_zone_profile['zone14_entries']}"
         )
 
     if opp_shot_profile["set_piece_xg"] >= 0.3:
-        opponent_edges.append(f"Set-piece threat conceded: {opp_shot_profile['set_piece_xg']:.2f} xG")
+        opponent_edges.append(f"セットプレー脅威を許した: {opp_shot_profile['set_piece_xg']:.2f} xG")
     if shot_profile["set_piece_xg"] >= 0.25:
-        arsenal_edges.append(f"Set-piece threat created: {shot_profile['set_piece_xg']:.2f} xG")
+        arsenal_edges.append(f"セットプレー脅威を作った: {shot_profile['set_piece_xg']:.2f} xG")
 
     if not race_df.empty:
         arsenal_60 = (
@@ -1709,9 +1709,9 @@ def build_result_drivers(
             else 0
         )
         if arsenal_60 - opp_60 >= 0.35:
-            arsenal_edges.append("Early control: Arsenal led the xG race by 60'")
+            arsenal_edges.append("60分時点でxG推移をリード")
         elif opp_60 - arsenal_60 >= 0.35:
-            opponent_edges.append("Early control lost: opponent led the xG race by 60'")
+            opponent_edges.append("60分時点で相手にxG推移をリードされた")
 
     return arsenal_edges[:4], opponent_edges[:4]
 
@@ -2255,8 +2255,8 @@ def build_player_impact_df(player_df: pd.DataFrame) -> pd.DataFrame:
     )
     frame["Why"] = frame.apply(
         lambda row: (
-            f"rating {row['rating_num']:.1f} | final-third {int(row['final_third_num'])} | "
-            f"passes {int(row['accurate_passes_num'])} | touches {int(row['touches_num'])}"
+            f"評価 {row['rating_num']:.1f} | ファイナルサード {int(row['final_third_num'])} | "
+            f"成功パス {int(row['accurate_passes_num'])} | タッチ {int(row['touches_num'])}"
         ),
         axis=1,
     )
@@ -2340,16 +2340,16 @@ def build_role_profile_df(player_df: pd.DataFrame, shot_df: pd.DataFrame, relati
         recoveries = int(numeric_or_default(row.get("recoveries")))
         shots = int(shot_counts.get(name, 0))
         hub_score = float(hub_map.get(name, 0.0))
-        role = "Connector"
+        role = "接続役"
         if shots >= 3 or (shots >= 1 and numeric_or_default(row.get("rating_last_match")) >= 7.5):
-            role = "Finisher"
+            role = "フィニッシャー"
         elif final_third >= 6 or accurate_passes >= 50:
-            role = "Progressor"
+            role = "前進役"
         elif recoveries >= 6:
-            role = "Ball Winner"
+            role = "奪回役"
         elif hub_score >= 3.0 or touches >= 55:
-            role = "Connector"
-        evidence = f"shots {shots} | final-third {final_third} | passes {accurate_passes} | recoveries {recoveries} | hub {hub_score:.2f}"
+            role = "接続役"
+        evidence = f"シュート {shots} | ファイナルサード {final_third} | 成功パス {accurate_passes} | 回収 {recoveries} | ハブ {hub_score:.2f}"
         rows.append({"Player": name, "Role": role, "Evidence": evidence})
     return pd.DataFrame(rows)
 
@@ -3536,7 +3536,7 @@ def create_zone_threat_map(zone_threat_df: pd.DataFrame) -> go.Figure:
     add_pitch_shapes(fig)
     if zone_threat_df.empty:
         fig.update_xaxes(range=[-2, 122], visible=False)
-        fig.update_yaxes(range=[-2, 82], visible=False, scaleanchor="x", scaleratio=1)
+        fig.update_yaxes(range=[82, -2], visible=False, scaleanchor="x", scaleratio=1)
         return fig
     max_threat = max(float(zone_threat_df["Threat"].max()), 0.01)
     for _, row in zone_threat_df.iterrows():
@@ -3577,7 +3577,7 @@ def create_zone_threat_map(zone_threat_df: pd.DataFrame) -> go.Figure:
         )
     )
     fig.update_xaxes(range=[-2, 122], visible=False)
-    fig.update_yaxes(range=[-2, 82], visible=False, scaleanchor="x", scaleratio=1)
+    fig.update_yaxes(range=[82, -2], visible=False, scaleanchor="x", scaleratio=1)
     return fig
 
 
@@ -3848,7 +3848,7 @@ def create_build_up_structure_chart(structure_df: pd.DataFrame) -> go.Figure:
     add_pitch_shapes(fig)
     if structure_df.empty:
         fig.update_xaxes(range=[-2, 122], visible=False)
-        fig.update_yaxes(range=[-2, 82], visible=False, scaleanchor="x", scaleratio=1)
+        fig.update_yaxes(range=[82, -2], visible=False, scaleanchor="x", scaleratio=1)
         return fig
     line_colors = {
         "レストディフェンス": "#93C5FD",
@@ -3877,9 +3877,9 @@ def create_build_up_structure_chart(structure_df: pd.DataFrame) -> go.Figure:
         )
     for x_value, label in [(40, "レストD"), (68, "ビルド"), (92, "ライン間")]:
         fig.add_shape(type="line", x0=x_value, y0=0, x1=x_value, y1=80, line=dict(color="rgba(255,255,255,0.18)", dash="dot"))
-        fig.add_annotation(x=x_value + 1, y=76, text=label, showarrow=False, font=dict(size=10, color=TEXT_MUTED))
+        fig.add_annotation(x=x_value + 1, y=4, text=label, showarrow=False, font=dict(size=10, color=TEXT_MUTED))
     fig.update_xaxes(range=[-2, 122], visible=False)
-    fig.update_yaxes(range=[-2, 82], visible=False, scaleanchor="x", scaleratio=1)
+    fig.update_yaxes(range=[82, -2], visible=False, scaleanchor="x", scaleratio=1)
     return fig
 
 
@@ -4525,8 +4525,26 @@ if layout_mode == "Guided Story":
         st.caption("最後に選手へ降ります。試合単位の貢献とシーズン全体の評価を分けて見ます。")
         player_tabs = st.tabs(["Match Impact", "Player Deep Dive", "Season"])
         with player_tabs[0]:
-            st.dataframe(player_impact_df, width="stretch", hide_index=True)
-            st.dataframe(role_profile_df, width="stretch", hide_index=True)
+            st.dataframe(
+                player_impact_df,
+                width="stretch",
+                hide_index=True,
+                column_config={
+                    "Player": st.column_config.TextColumn("選手", width="medium"),
+                    "Impact": st.column_config.NumberColumn("影響度", format="%.2f"),
+                    "Why": st.column_config.TextColumn("根拠", width="large"),
+                },
+            )
+            st.dataframe(
+                role_profile_df,
+                width="stretch",
+                hide_index=True,
+                column_config={
+                    "Player": st.column_config.TextColumn("選手", width="medium"),
+                    "Role": st.column_config.TextColumn("役割", width="small"),
+                    "Evidence": st.column_config.TextColumn("根拠", width="large"),
+                },
+            )
         with player_tabs[1]:
             if selected_deep_dive_player:
                 deep_left, deep_right = st.columns([0.95, 1.05])
